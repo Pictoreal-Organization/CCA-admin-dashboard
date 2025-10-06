@@ -259,11 +259,14 @@ export default function Dashboard() {
                       </div>
                     </th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
+                      Division
+                    </th>
+                    {/* <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">
                       <div className="flex items-center gap-2">
                         <Key className="w-4 h-4" />
                         Initial Password
                       </div>
-                    </th>
+                    </th> */}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700/50">
@@ -282,11 +285,14 @@ export default function Dashboard() {
                           {u.role}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 text-slate-300">
+                        {u.year && u.division ? `${u.year} ${u.division}` : 'N/A'}
+                      </td>
+                      {/* <td className="px-6 py-4">
                         <code className="px-3 py-1 bg-slate-900 text-slate-300 rounded-lg text-sm font-mono border border-slate-700">
                           {u.password}
                         </code>
-                      </td>
+                      </td> */}
                     </tr>
                   ))}
                 </tbody>
@@ -301,7 +307,8 @@ export default function Dashboard() {
                     <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Username</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Email</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Teams</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Password</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Division</th>
+                    {/* <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Password</th> */}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700/50">
@@ -318,11 +325,14 @@ export default function Dashboard() {
                           ))}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-6 py-4 text-slate-300">
+                        {m.year && m.division ? `${m.year} ${m.division}` : 'N/A'}
+                      </td>
+                      {/* <td className="px-6 py-4">
                         <code className="px-3 py-1 bg-slate-900 text-slate-300 rounded-lg text-sm font-mono border border-slate-700">
                           {m.initialPassword}
                         </code>
-                      </td>
+                      </td> */}
                     </tr>
                   ))}
                 </tbody>
