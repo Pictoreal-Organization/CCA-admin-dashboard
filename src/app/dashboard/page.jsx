@@ -687,30 +687,36 @@ import {
   CheckSquare,
   UsersRound,
   UserCog,
-  Clock,
-  MapPin,
   Search,
   Trash2,
   ChevronDown,
   ChevronUp,
   Briefcase,
-  Users as UsersIcon
+  Users as UsersIcon,
+  Tag,
+  PlusCircle
 } from "lucide-react";
 
 export default function Dashboard() {
   const router = useRouter();
+  // Data States
   const [users, setUsers] = useState([]);
   const [members, setMembers] = useState([]);
   const [heads, setHeads] = useState([]);
   const [meetings, setMeetings] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const [tags, setTags] = useState([]); // ✅ New Tags State
+
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("users");
   const [searchQuery, setSearchQuery] = useState("");
   
-  // ✅ New State for Expanded Row
+  // UI States
   const [expandedUserId, setExpandedUserId] = useState(null);
+  const [newTagName, setNewTagName] = useState(""); // ✅ State for adding tag
+  const [isAddingTag, setIsAddingTag] = useState(false);
 
+  // Modals & Context Menu
   const [contextMenu, setContextMenu] = useState(null);
   const [deleteModal, setDeleteModal] = useState(null);
   const [securityCode, setSecurityCode] = useState("");
@@ -725,23 +731,15 @@ export default function Dashboard() {
 
     const fetchAllData = async () => {
       try {
-        const [usersRes, membersRes, headsRes, meetingsRes, tasksRes] =
+        // Added tags fetch to the Promise.all
+        const [usersRes, membersRes, headsRes, meetingsRes, tasksRes, tagsRes] =
           await Promise.all([
-            api.get("/admin/users", {
-              headers: { Authorization: `Bearer ${token}` },
-            }),
-            api.get("/admin/members", {
-              headers: { Authorization: `Bearer ${token}` },
-            }),
-            api.get("/admin/heads", {
-              headers: { Authorization: `Bearer ${token}` },
-            }),
-            api.get("/admin/meetings", {
-              headers: { Authorization: `Bearer ${token}` },
-            }),
-            api.get("/admin/tasks", {
-              headers: { Authorization: `Bearer ${token}` },
-            }),
+            api.get("/admin/users", { headers: { Authorization: `Bearer ${token}` } }),
+            api.get("/admin/members", { headers: { Authorization: `Bearer ${token}` } }),
+            api.get("/admin/heads", { headers: { Authorization: `Bearer ${token}` } }),
+            api.get("/admin/meetings", { headers: { Authorization: `Bearer ${token}` } }),
+            api.get("/admin/tasks", { headers: { Authorization: `Bearer ${token}` } }),
+            api.get("/tags", { headers: { Authorization: `Bearer ${token}` } }), // ✅ Fetch Tags
           ]);
 
         setUsers(usersRes.data || []);
@@ -749,6 +747,7 @@ export default function Dashboard() {
         setHeads(headsRes.data || []);
         setMeetings(meetingsRes.data || []);
         setTasks(tasksRes.data || []);
+        setTags(tagsRes.data || []); // ✅ Set Tags
         setLoading(false);
       } catch (err) {
         console.error("Error fetching data:", err);
@@ -769,6 +768,27 @@ export default function Dashboard() {
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
   }, []);
+
+  // --- ACTIONS ---
+
+  const handleAddTag = async () => {
+    if (!newTagName.trim()) return;
+    setIsAddingTag(true);
+    try {
+      const token = localStorage.getItem("adminToken");
+      const res = await api.post("/tags/create", { name: newTagName }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setTags([...tags, res.data.tag]);
+      setNewTagName("");
+      alert("Tag added successfully!");
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.msg || "Failed to add tag");
+    } finally {
+      setIsAddingTag(false);
+    }
+  };
 
   // --- STATS & DETAILS LOGIC ---
   const getUserStats = (userId) => {
@@ -798,9 +818,7 @@ export default function Dashboard() {
     return { meetingCounts, completedTasks };
   };
 
-  // ✅ New Helper: Get Detailed Meeting & Task Data for a User
   const getMemberDetails = (userId) => {
-    // 1. Filter Meetings
     const userMeetings = meetings.filter((meet) => {
       const isInvited = meet.invitedMembers?.some((m) => (m._id || m) === userId);
       const isInTeam = meet.team?.some((t) => 
@@ -809,9 +827,7 @@ export default function Dashboard() {
       return isInvited || isInTeam;
     });
 
-    // 2. Filter Tasks (Find main tasks where user has at least one subtask)
     const userTasks = tasks.map(task => {
-      // Find subtasks assigned to this user
       const mySubtasks = task.subtasks?.filter(sub => 
         sub.assignedTo?.some(u => (u._id || u) === userId)
       );
@@ -843,16 +859,17 @@ export default function Dashboard() {
 
   const handleContextMenu = (e, item, type) => {
     e.preventDefault();
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      item,
-      type,
-    });
+    setContextMenu({ x: e.clientX, y: e.clientY, item, type });
   };
 
-  const handleDeleteClick = () => {
-    const { item, type } = contextMenu;
+  // Initial Trigger for Delete
+  const handleDeleteClick = (itemOverride = null, typeOverride = null) => {
+    const item = itemOverride || contextMenu?.item;
+    const type = typeOverride || contextMenu?.type;
+    
+    if (!item || !type) return;
+
+    // Tags don't necessarily need a security code, but users/heads do
     const requiresSecurityCode = ["user", "member", "head"].includes(type);
     
     if (requiresSecurityCode) {
@@ -886,6 +903,8 @@ export default function Dashboard() {
           endpoint = `/meetings/delete/${item._id}`; break;
         case "task":
           endpoint = `/tasks/delete/${item._id}`; break;
+        case "tag": // ✅ Delete Tag Endpoint
+          endpoint = `/tags/delete/${item._id}`; break;
         default: return;
       }
   
@@ -898,6 +917,7 @@ export default function Dashboard() {
         case "head": setHeads(removeFilter(heads)); break;
         case "meeting": setMeetings(removeFilter(meetings)); break;
         case "task": setTasks(removeFilter(tasks)); break;
+        case "tag": setTags(removeFilter(tags)); break; // ✅ Update Tags State
       }
       alert(`${type} deleted successfully!`);
     } catch (err) {
@@ -924,6 +944,7 @@ export default function Dashboard() {
   const filteredHeads = filterData(heads, ["username", "email", "team"]);
   const filteredMeetings = filterData(meetings, ["title", "location", "status", "priority", "tags"]);
   const filteredTasks = filterData(tasks, ["title", "team.name", "status"]);
+  const filteredTags = filterData(tags, ["name"]); // ✅ Filter Tags
 
   if (loading) {
     return (
@@ -1009,6 +1030,7 @@ export default function Dashboard() {
             <button onClick={() => setActiveTab("heads")} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === "heads" ? "bg-purple-500 text-white" : "text-slate-400 hover:text-white hover:bg-slate-700/50"}`}><UserCog className="w-4 h-4" /> All Heads</button>
             <button onClick={() => setActiveTab("meetings")} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === "meetings" ? "bg-cyan-500 text-white" : "text-slate-400 hover:text-white hover:bg-slate-700/50"}`}><Calendar className="w-4 h-4" /> All Meetings</button>
             <button onClick={() => setActiveTab("tasks")} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === "tasks" ? "bg-orange-500 text-white" : "text-slate-400 hover:text-white hover:bg-slate-700/50"}`}><CheckSquare className="w-4 h-4" /> All Tasks</button>
+            <button onClick={() => setActiveTab("tags")} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === "tags" ? "bg-pink-500 text-white" : "text-slate-400 hover:text-white hover:bg-slate-700/50"}`}><Tag className="w-4 h-4" /> Meeting Tags</button>
           </div>
         </div>
 
@@ -1046,7 +1068,7 @@ export default function Dashboard() {
               )}</>
             )}
 
-            {/* === MEMBERS TAB (Expandable) === */}
+            {/* === MEMBERS TAB === */}
             {activeTab === "members" && (
               <>{filteredMembers.length === 0 ? <div className="px-6 py-12 text-center"><UsersRound className="w-12 h-12 text-slate-600 mx-auto mb-3" /><p className="text-slate-400">No members found</p></div> : (
                 <table className="w-full">
@@ -1083,8 +1105,6 @@ export default function Dashboard() {
                             </td>
                             <td className="px-6 py-4"><div className="flex flex-wrap gap-1">{m.team?.map((t, i) => (<span key={i} className="px-2 py-1 bg-green-500/20 text-green-300 text-xs rounded">{t.name || t}</span>))}</div></td>
                             <td className="px-6 py-4 text-slate-300">{m.year && m.division ? `${m.year} ${m.division}` : "N/A"}</td>
-                            
-                            {/* Stats Badges */}
                             <td className="px-6 py-4">
                               <div className="flex justify-center gap-2">
                                 <div className="flex flex-col items-center" title="Urgent"><span className="w-2 h-2 rounded-full bg-red-500 mb-1"></span><span className="text-sm text-slate-300">{stats.meetingCounts.Urgent}</span></div>
@@ -1100,14 +1120,10 @@ export default function Dashboard() {
                               </div>
                             </td>
                           </tr>
-                          
-                          {/* --- EXPANDED ROW CONTENT --- */}
                           {isExpanded && (
                             <tr className="bg-slate-900/40">
                               <td colSpan="6" className="px-6 py-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                  
-                                  {/* Meetings Attended */}
                                   <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700/50">
                                     <div className="flex items-center gap-2 mb-4 text-cyan-400">
                                       <Calendar className="w-5 h-5" />
@@ -1130,8 +1146,6 @@ export default function Dashboard() {
                                       <p className="text-slate-500 text-sm italic">No meetings found.</p>
                                     )}
                                   </div>
-
-                                  {/* Tasks & Subtasks */}
                                   <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700/50">
                                     <div className="flex items-center gap-2 mb-4 text-orange-400">
                                       <Briefcase className="w-5 h-5" />
@@ -1162,7 +1176,6 @@ export default function Dashboard() {
                                       <p className="text-slate-500 text-sm italic">No tasks assigned.</p>
                                     )}
                                   </div>
-
                                 </div>
                               </td>
                             </tr>
@@ -1175,7 +1188,7 @@ export default function Dashboard() {
               )}</>
             )}
 
-            {/* === HEADS TAB (No Password) === */}
+            {/* === HEADS TAB === */}
             {activeTab === "heads" && (
               <>{filteredHeads.length === 0 ? <div className="px-6 py-12 text-center"><UserCog className="w-12 h-12 text-slate-600 mx-auto mb-3" /><p className="text-slate-400">No heads found</p></div> : (
                 <table className="w-full">
@@ -1185,7 +1198,7 @@ export default function Dashboard() {
               )}</>
             )}
 
-            {/* Meetings Tab */}
+            {/* === MEETINGS TAB === */}
             {activeTab === "meetings" && (
               <>{filteredMeetings.length === 0 ? <div className="px-6 py-12 text-center"><Calendar className="w-12 h-12 text-slate-600 mx-auto mb-3" /><p className="text-slate-400">No meetings found</p></div> : (
                 <table className="w-full">
@@ -1195,7 +1208,7 @@ export default function Dashboard() {
               )}</>
             )}
 
-            {/* Tasks Tab */}
+            {/* === TASKS TAB === */}
             {activeTab === "tasks" && (
               <>{filteredTasks.length === 0 ? <div className="px-6 py-12 text-center"><CheckSquare className="w-12 h-12 text-slate-600 mx-auto mb-3" /><p className="text-slate-400">No tasks found</p></div> : (
                 <table className="w-full">
@@ -1205,13 +1218,59 @@ export default function Dashboard() {
               )}</>
             )}
 
+            {/* === ✅ TAGS TAB === */}
+            {activeTab === "tags" && (
+              <div className="p-6">
+                {/* Create Tag Section */}
+                <div className="bg-slate-900/50 border border-slate-700/50 rounded-xl p-6 mb-8">
+                  <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Tag className="w-5 h-5 text-pink-500" /> Manage Meeting Tags</h3>
+                  <div className="flex gap-3 items-center">
+                    <input 
+                      type="text" 
+                      value={newTagName}
+                      onChange={(e) => setNewTagName(e.target.value)}
+                      placeholder="Enter new tag name..." 
+                      className="bg-slate-800 border border-slate-700 text-white rounded-lg px-4 py-2 w-full max-w-md focus:outline-none focus:border-pink-500"
+                    />
+                    <button 
+                      onClick={handleAddTag}
+                      disabled={isAddingTag}
+                      className="flex items-center gap-2 px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-lg transition-colors font-medium disabled:opacity-50"
+                    >
+                      {isAddingTag ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
+                      Add Tag
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tags List */}
+                {filteredTags.length === 0 ? (
+                   <div className="text-center py-8"><Tag className="w-12 h-12 text-slate-600 mx-auto mb-3" /><p className="text-slate-400">No tags found.</p></div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                    {filteredTags.map((tag) => (
+                      <div key={tag._id} className="group flex items-center justify-between p-3 bg-slate-800 border border-slate-700 rounded-lg hover:border-pink-500/50 transition-all">
+                        <span className="text-white font-medium truncate mr-2" title={tag.name}>{tag.name}</span>
+                        <button 
+                          onClick={() => handleDeleteClick(tag, "tag")}
+                          className="text-slate-500 hover:text-red-400 p-1 rounded-full hover:bg-slate-700 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
         </div>
       </main>
 
       {contextMenu && (
         <div className="fixed bg-slate-800 border border-slate-700 rounded-lg shadow-2xl py-2 z-50" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(e) => e.stopPropagation()}>
-          <button onClick={handleDeleteClick} className="w-full px-4 py-2 text-left text-red-400 hover:bg-slate-700 transition-colors flex items-center gap-2"><Trash2 className="w-4 h-4" /> Delete {contextMenu.type}</button>
+          <button onClick={() => handleDeleteClick()} className="w-full px-4 py-2 text-left text-red-400 hover:bg-slate-700 transition-colors flex items-center gap-2"><Trash2 className="w-4 h-4" /> Delete {contextMenu.type}</button>
         </div>
       )}
 
@@ -1222,7 +1281,10 @@ export default function Dashboard() {
               <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center"><Trash2 className="w-6 h-6 text-red-400" /></div>
               <div><h3 className="text-xl font-bold text-white">Delete {deleteModal.type.charAt(0).toUpperCase() + deleteModal.type.slice(1)}</h3><p className="text-slate-400 text-sm">This action cannot be undone</p></div>
             </div>
-            <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 mb-4"><p className="text-slate-300 text-sm mb-2">You are about to delete:</p><p className="text-white font-semibold">{deleteModal.item.username || deleteModal.item.title || deleteModal.item.email}</p></div>
+            <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 mb-4">
+              <p className="text-slate-300 text-sm mb-2">You are about to delete:</p>
+              <p className="text-white font-semibold">{deleteModal.item.username || deleteModal.item.title || deleteModal.item.email || deleteModal.item.name}</p>
+            </div>
             {deleteModal.requiresSecurityCode && (
               <div className="mb-4">
                 <label className="block text-slate-300 text-sm font-medium mb-2">Enter Security Code</label>
