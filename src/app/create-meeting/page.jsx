@@ -251,7 +251,7 @@ export default function CreateMeeting() {
                     setSelectedTeam("");
                   }}
                   className={`px-4 py-2 rounded-xl border ${scope === "general"
-                      ? "bg-cyan-600 text-white border-cyan-700"
+                      ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-transparent hover:from-cyan-600 hover:to-blue-700 text-white border-cyan-700"
                       : "bg-slate-900/50 text-slate-400 border-slate-600"
                     }`}
                 >
@@ -262,7 +262,7 @@ export default function CreateMeeting() {
                   type="button"
                   onClick={() => setScope("team")}
                   className={`px-4 py-2 rounded-xl border ${scope === "team"
-                      ? "bg-cyan-600 text-white border-cyan-700"
+                      ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-transparent hover:from-cyan-600 hover:to-blue-700 text-white border-cyan-700"
                       : "bg-slate-900/50 text-slate-400 border-slate-600"
                     }`}
                 >
@@ -288,7 +288,7 @@ export default function CreateMeeting() {
                         key={team._id}
                         onClick={() => setSelectedTeam(team._id)}
                         className={`px-4 py-2 rounded-full border ${selectedTeam === team._id
-                            ? "bg-cyan-600 text-white border-cyan-700"
+                            ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-transparent hover:from-cyan-600 hover:to-blue-700 text-white border-cyan-700"
                             : "bg-slate-900/50 text-slate-300 border-slate-700"
                           }`}
                       >
@@ -315,7 +315,7 @@ export default function CreateMeeting() {
                   onClick={() => setLocation("online")}
                   className={`px-4 py-2 rounded-xl border 
         ${location === "online"
-                      ? "bg-cyan-600 border-cyan-400 text-white"
+                      ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-transparent hover:from-cyan-600 hover:to-blue-700 border-cyan-400 text-white"
                       : "bg-slate-900/50 border-slate-600 text-slate-300"
                     }`}
                 >
@@ -328,7 +328,7 @@ export default function CreateMeeting() {
                   onClick={() => setLocation("offline")}
                   className={`px-4 py-2 rounded-xl border 
         ${location === "offline"
-                      ? "bg-cyan-600 border-cyan-400 text-white"
+                      ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-transparent hover:from-cyan-600 hover:to-blue-700 border-cyan-400 text-white"
                       : "bg-slate-900/50 border-slate-600 text-slate-300"
                     }`}
                 >
@@ -422,10 +422,10 @@ export default function CreateMeeting() {
                 onChange={(e) => setPriority(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-all"
               >
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Urgent">Urgent</option>
+                <option value="Low" className="bg-slate-900 text-white hover:bg-blue-600">Low</option>
+                <option value="Medium" className="bg-slate-900 text-white hover:bg-blue-600">Medium</option>
+                <option value="High" className="bg-slate-900 text-white hover:bg-blue-600">High</option>
+                <option value="Urgent" className="bg-slate-900 text-white hover:bg-blue-600">Urgent</option>
               </select>
             </div>
 
@@ -478,7 +478,7 @@ export default function CreateMeeting() {
                   type="button"
                   onClick={() => setIsPrivate(false)}
                   className={`px-4 py-2 rounded-xl border ${!isPrivate
-                      ? "bg-cyan-600 border-cyan-400 text-white"
+                      ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-transparent hover:from-cyan-600 hover:to-blue-700 border-cyan-400 text-white"
                       : "bg-slate-900/50 border-slate-600 text-slate-300"
                     }`}
                 >
@@ -489,7 +489,7 @@ export default function CreateMeeting() {
                   type="button"
                   onClick={() => setIsPrivate(true)}
                   className={`px-4 py-2 rounded-xl border ${isPrivate
-                      ? "bg-cyan-600 border-cyan-400 text-white"
+                      ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-transparent hover:from-cyan-600 hover:to-blue-700 border-cyan-400 text-white"
                       : "bg-slate-900/50 border-slate-600 text-slate-300"
                     }`}
                 >
