@@ -694,7 +694,11 @@ import {
   Briefcase,
   Users as UsersIcon,
   Tag,
-  PlusCircle
+  PlusCircle,
+  X,
+  MapPin,
+  Clock,
+  AlertCircle
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -706,6 +710,7 @@ export default function Dashboard() {
   const [meetings, setMeetings] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [tags, setTags] = useState([]); // ✅ New Tags State
+  const [userSortOrder, setUserSortOrder] = useState("asc"); // "asc" or "desc"
 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("users");
@@ -721,6 +726,16 @@ export default function Dashboard() {
   const [deleteModal, setDeleteModal] = useState(null);
   const [securityCode, setSecurityCode] = useState("");
   const [generatedCode, setGeneratedCode] = useState("");
+
+  // Meeting Details Modal
+  const [isMeetingDetailModalOpen, setIsMeetingDetailModalOpen] = useState(false);
+  const [currentMeetingDetails, setCurrentMeetingDetails] = useState(null);
+  const [fetchingMeetingDetails, setFetchingMeetingDetails] = useState(false);
+
+  // Task Details Modal
+  const [isTaskDetailModalOpen, setIsTaskDetailModalOpen] = useState(false);
+  const [currentTaskDetails, setCurrentTaskDetails] = useState(null);
+  const [fetchingTaskDetails, setFetchingTaskDetails] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("adminToken");
@@ -748,6 +763,7 @@ export default function Dashboard() {
         setMeetings(meetingsRes.data || []);
         setTasks(tasksRes.data || []);
         setTags(tagsRes.data || []); // ✅ Set Tags
+        console.log("Meetings fetched:", meetingsRes.data?.length || 0, "meetings");
         setLoading(false);
       } catch (err) {
         console.error("Error fetching data:", err);
@@ -939,12 +955,86 @@ export default function Dashboard() {
     );
   };
 
-  const filteredUsers = filterData(users, ["username", "email", "role", "year", "division"]);
-  const filteredMembers = filterData(members, ["username", "email", "team", "year", "division"]);
-  const filteredHeads = filterData(heads, ["username", "email", "team"]);
+  const filteredUsers = filterData(users, ["username","name", "email", "role", "year", "division"]);
+  const filteredMembers = filterData(members, ["username","name", "email", "team", "year", "division"]);
+  const filteredHeads = filterData(heads, ["username", "name","email", "team"]);
   const filteredMeetings = filterData(meetings, ["title", "location", "status", "priority", "tags"]);
   const filteredTasks = filterData(tasks, ["title", "team.name", "status"]);
   const filteredTags = filterData(tags, ["name"]); // ✅ Filter Tags
+
+  const sortedUsers = [...filteredUsers].sort((a, b) => {
+    const nameA = (a.name || "").toLowerCase();
+    const nameB = (b.name || "").toLowerCase();
+    if (userSortOrder === "asc") return nameA.localeCompare(nameB);
+    return nameB.localeCompare(nameA);
+  });
+
+  const handleMeetingClick = async (meetingId) => {
+    setFetchingMeetingDetails(true);
+    setIsMeetingDetailModalOpen(true); 
+    setCurrentMeetingDetails(null);
+
+    const token = localStorage.getItem("adminToken");
+
+    try {
+        const [meetingRes, attendanceRes] = await Promise.all([
+            api.get(`/meetings/${meetingId}`, { 
+                headers: { Authorization: `Bearer ${token}` } 
+            }),
+
+            api.get(`/attendance/meeting/${meetingId}`, {   
+                headers: { Authorization: `Bearer ${token}` }
+            })
+        ]);
+        
+        const attendanceData = Array.isArray(attendanceRes.data) ? attendanceRes.data : [];
+
+        const transformedAttendance = {
+            present: attendanceData
+                .filter(item => item.status === "present")
+                .map(item => item.member || item),
+            absent: attendanceData
+                .filter(item => item.status === "absent")
+                .map(item => item.member || item)
+        };
+        
+        const meetingData = meetingRes.data || {};
+
+        setCurrentMeetingDetails({
+            ...meetingData,
+            attendance: transformedAttendance
+        });
+
+    } catch (err) {
+        console.error("Failed to fetch meeting details:", err);
+        alert("Failed to load meeting details.");
+        setIsMeetingDetailModalOpen(false);
+    } finally {
+        setFetchingMeetingDetails(false);
+    }
+};
+
+  const handleTaskClick = async (taskId) => {
+    setFetchingTaskDetails(true);
+    setIsTaskDetailModalOpen(true);
+    setCurrentTaskDetails(null);
+
+    const token = localStorage.getItem("adminToken");
+
+    try {
+        const res = await api.get(`/tasks/${taskId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        setCurrentTaskDetails(res.data);
+    } catch (err) {
+        console.error("Failed to fetch task details:", err);
+        alert("Failed to load task details.");
+        setIsTaskDetailModalOpen(false);
+    } finally {
+        setFetchingTaskDetails(false);
+    }
+};
 
   if (loading) {
     return (
@@ -1045,7 +1135,7 @@ export default function Dashboard() {
                 <table className="w-full">
                   <thead className="bg-slate-900/50">
                     <tr>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Username</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Name</th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Role</th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Division</th>
                     </tr>
@@ -1054,7 +1144,7 @@ export default function Dashboard() {
                     {filteredUsers.map((u) => (
                         <tr key={u._id} className="hover:bg-slate-700/30 transition-colors cursor-pointer" onContextMenu={(e) => handleContextMenu(e, u, "user")}>
                           <td className="px-6 py-4">
-                            <div className="text-white font-medium">{u.username}</div>
+                            <div className="text-white font-medium">{u.name}</div>
                             <div className="text-xs text-slate-400">{u.email}</div>
                           </td>
                           <td className="px-6 py-4">
@@ -1075,7 +1165,7 @@ export default function Dashboard() {
                   <thead className="bg-slate-900/50">
                     <tr>
                       <th className="px-6 py-4 w-8"></th>
-                      <th className="px-6 py-4 text-left text-sm text-slate-300">Username</th>
+                      <th className="px-6 py-4 text-left text-sm text-slate-300">Name</th>
                       <th className="px-6 py-4 text-left text-sm text-slate-300">Teams</th>
                       <th className="px-6 py-4 text-left text-sm text-slate-300">Division</th>
                       <th className="px-6 py-4 text-center text-sm text-slate-300">Meetings <br/><span className="text-[10px] text-slate-500">(U/H/M/L)</span></th>
@@ -1100,7 +1190,7 @@ export default function Dashboard() {
                               {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                             </td>
                             <td className="px-6 py-4">
-                              <div className="text-white font-medium">{m.username}</div>
+                              <div className="text-white font-medium">{m.name}</div>
                               <div className="text-xs text-slate-400">{m.email}</div>
                             </td>
                             <td className="px-6 py-4"><div className="flex flex-wrap gap-1">{m.team?.map((t, i) => (<span key={i} className="px-2 py-1 bg-green-500/20 text-green-300 text-xs rounded">{t.name || t}</span>))}</div></td>
@@ -1192,47 +1282,123 @@ export default function Dashboard() {
             {activeTab === "heads" && (
               <>{filteredHeads.length === 0 ? <div className="px-6 py-12 text-center"><UserCog className="w-12 h-12 text-slate-600 mx-auto mb-3" /><p className="text-slate-400">No heads found</p></div> : (
                 <table className="w-full">
-                  <thead className="bg-slate-900/50"><tr><th className="px-6 py-4 text-left text-sm text-slate-300">Username</th><th className="px-6 py-4 text-left text-sm text-slate-300">Email</th><th className="px-6 py-4 text-left text-sm text-slate-300">Teams</th></tr></thead>
-                  <tbody className="divide-y divide-slate-700/50">{filteredHeads.map((h) => (<tr key={h._id} className="hover:bg-slate-700/30 transition-colors cursor-pointer" onContextMenu={(e) => handleContextMenu(e, h, "head")}><td className="px-6 py-4 text-white font-medium">{h.username}</td><td className="px-6 py-4 text-slate-300">{h.email}</td><td className="px-6 py-4"><div className="flex flex-wrap gap-1">{h.team?.map((t, i) => (<span key={i} className="px-2 py-1 bg-purple-500/20 text-purple-300 text-xs rounded">{t.name || t}</span>))}</div></td></tr>))}</tbody>
+                  <thead className="bg-slate-900/50"><tr><th className="px-6 py-4 text-left text-sm text-slate-300">Name</th><th className="px-6 py-4 text-left text-sm text-slate-300">Email</th><th className="px-6 py-4 text-left text-sm text-slate-300">Teams</th></tr></thead>
+                  <tbody className="divide-y divide-slate-700/50">{filteredHeads.map((h) => (<tr key={h._id} className="hover:bg-slate-700/30 transition-colors cursor-pointer" onContextMenu={(e) => handleContextMenu(e, h, "head")}><td className="px-6 py-4 text-white font-medium">{h.name}</td><td className="px-6 py-4 text-slate-300">{h.email}</td><td className="px-6 py-4"><div className="flex flex-wrap gap-1">{h.team?.map((t, i) => (<span key={i} className="px-2 py-1 bg-purple-500/20 text-purple-300 text-xs rounded">{t.name || t}</span>))}</div></td></tr>))}</tbody>
                 </table>
               )}</>
             )}
 
             {/* === MEETINGS TAB === */}
             {activeTab === "meetings" && (
-              <>{filteredMeetings.length === 0 ? <div className="px-6 py-12 text-center"><Calendar className="w-12 h-12 text-slate-600 mx-auto mb-3" /><p className="text-slate-400">No meetings found</p></div> : (
-                <table className="w-full">
-                  <thead className="bg-slate-900/50"><tr><th className="px-6 py-4 text-left text-sm text-slate-300">Title</th><th className="px-6 py-4 text-left text-sm text-slate-300">Date & Time</th><th className="px-6 py-4 text-left text-sm text-slate-300">Location</th><th className="px-6 py-4 text-left text-sm text-slate-300">Status</th></tr></thead>
-                  <tbody className="divide-y divide-slate-700/50">{filteredMeetings.map((meeting) => (<tr key={meeting._id} className="hover:bg-slate-700/30 transition-colors cursor-pointer" onContextMenu={(e) => handleContextMenu(e, meeting, "meeting")}><td className="px-6 py-4 text-white font-medium">{meeting.title}</td><td className="px-6 py-4 text-slate-300">{new Date(meeting.dateTime).toLocaleString()}</td><td className="px-6 py-4 text-slate-300">{meeting.location || "N/A"}</td><td className="px-6 py-4"><span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300">{meeting.status}</span></td></tr>))}</tbody>
-                </table>
-              )}</>
+              <>
+                {meetings.length === 0 ? (
+                  <div className="px-6 py-12 text-center">
+                    <Calendar className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                    <p className="text-slate-400">No meetings found</p>
+                    <p className="text-slate-500 text-sm mt-2">Total meetings in database: {meetings.length}</p>
+                  </div>
+                ) : (
+                  <>
+                    <table className="w-full">
+                      <thead className="bg-slate-900/50">
+                        <tr>
+                          <th className="px-6 py-4 text-left text-sm text-slate-300">Title</th>
+                          <th className="px-6 py-4 text-left text-sm text-slate-300">Date & Time</th>
+                          <th className="px-6 py-4 text-left text-sm text-slate-300">Location</th>
+                          <th className="px-6 py-4 text-left text-sm text-slate-300">Status</th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-slate-700/50">
+                        {meetings.map((meeting) => (
+                          <tr
+                            key={meeting._id}
+                            onClick={() => handleMeetingClick(meeting._id)}
+                            className="hover:bg-slate-700/30 transition-colors cursor-pointer"
+                            onContextMenu={(e) => handleContextMenu(e, meeting, "meeting")}
+                          >
+                            <td className="px-6 py-4 text-white font-medium">{meeting.title}</td>
+                            <td className="px-6 py-4 text-slate-300">
+                              {new Date(meeting.dateTime).toLocaleString()}
+                            </td>
+                            <td className="px-6 py-4 text-slate-300">
+                              {meeting.location || "N/A"}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300">
+                                {meeting.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
+                )}
+              </>
             )}
 
             {/* === TASKS TAB === */}
             {activeTab === "tasks" && (
-              <>{filteredTasks.length === 0 ? <div className="px-6 py-12 text-center"><CheckSquare className="w-12 h-12 text-slate-600 mx-auto mb-3" /><p className="text-slate-400">No tasks found</p></div> : (
-                <table className="w-full">
-                  <thead className="bg-slate-900/50"><tr><th className="px-6 py-4 text-left text-sm text-slate-300">Title</th><th className="px-6 py-4 text-left text-sm text-slate-300">Team</th><th className="px-6 py-4 text-left text-sm text-slate-300">Status</th><th className="px-6 py-4 text-left text-sm text-slate-300">Deadline</th></tr></thead>
-                  <tbody className="divide-y divide-slate-700/50">{filteredTasks.map((task) => (<tr key={task._id} className="hover:bg-slate-700/30 transition-colors cursor-pointer" onContextMenu={(e) => handleContextMenu(e, task, "task")}><td className="px-6 py-4 text-white font-medium">{task.title}</td><td className="px-6 py-4 text-slate-300">{task.team?.name || "N/A"}</td><td className="px-6 py-4"><span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300">{task.status}</span></td><td className="px-6 py-4 text-slate-300">{task.deadline ? new Date(task.deadline).toLocaleDateString() : "No deadline"}</td></tr>))}</tbody>
-                </table>
-              )}</>
+              <>
+                {filteredTasks.length === 0 ? (
+                  <div className="px-6 py-12 text-center">
+                    <CheckSquare className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                    <p className="text-slate-400">No tasks found</p>
+                  </div>
+                ) : (
+                  <>
+                    <table className="w-full">
+                      <thead className="bg-slate-900/50">
+                        <tr>
+                          <th className="px-6 py-4 text-left text-sm text-slate-300">Title</th>
+                          <th className="px-6 py-4 text-left text-sm text-slate-300">Team</th>
+                          <th className="px-6 py-4 text-left text-sm text-slate-300">Status</th>
+                          <th className="px-6 py-4 text-left text-sm text-slate-300">Deadline</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-700/50">
+                        {filteredTasks.map((task) => (
+                          <tr
+                            key={task._id}
+                            onClick={() => handleTaskClick(task._id)}
+                            className="hover:bg-slate-700/30 transition-colors cursor-pointer"
+                            onContextMenu={(e) => handleContextMenu(e, task, "task")}
+                          >
+                            <td className="px-6 py-4 text-white font-medium">{task.title}</td>
+                            <td className="px-6 py-4 text-slate-300">{task.team?.name || "N/A"}</td>
+                            <td className="px-6 py-4">
+                              <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300">
+                                {task.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-slate-300">
+                              {task.deadline ? new Date(task.deadline).toLocaleDateString() : "No deadline"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
+                )}
+              </>
             )}
 
-            {/* === ✅ TAGS TAB === */}
+            {/* === TAGS TAB === */}
             {activeTab === "tags" && (
               <div className="p-6">
                 {/* Create Tag Section */}
                 <div className="bg-slate-900/50 border border-slate-700/50 rounded-xl p-6 mb-8">
                   <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Tag className="w-5 h-5 text-pink-500" /> Manage Meeting Tags</h3>
                   <div className="flex gap-3 items-center">
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={newTagName}
                       onChange={(e) => setNewTagName(e.target.value)}
-                      placeholder="Enter new tag name..." 
+                      placeholder="Enter new tag name..."
                       className="bg-slate-800 border border-slate-700 text-white rounded-lg px-4 py-2 w-full max-w-md focus:outline-none focus:border-pink-500"
                     />
-                    <button 
+                    <button
                       onClick={handleAddTag}
                       disabled={isAddingTag}
                       className="flex items-center gap-2 px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-lg transition-colors font-medium disabled:opacity-50"
@@ -1245,13 +1411,13 @@ export default function Dashboard() {
 
                 {/* Tags List */}
                 {filteredTags.length === 0 ? (
-                   <div className="text-center py-8"><Tag className="w-12 h-12 text-slate-600 mx-auto mb-3" /><p className="text-slate-400">No tags found.</p></div>
+                  <div className="text-center py-8"><Tag className="w-12 h-12 text-slate-600 mx-auto mb-3" /><p className="text-slate-400">No tags found.</p></div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                     {filteredTags.map((tag) => (
                       <div key={tag._id} className="group flex items-center justify-between p-3 bg-slate-800 border border-slate-700 rounded-lg hover:border-pink-500/50 transition-all">
                         <span className="text-white font-medium truncate mr-2" title={tag.name}>{tag.name}</span>
-                        <button 
+                        <button
                           onClick={() => handleDeleteClick(tag, "tag")}
                           className="text-slate-500 hover:text-red-400 p-1 rounded-full hover:bg-slate-700 transition-colors"
                         >
@@ -1271,6 +1437,434 @@ export default function Dashboard() {
       {contextMenu && (
         <div className="fixed bg-slate-800 border border-slate-700 rounded-lg shadow-2xl py-2 z-50" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(e) => e.stopPropagation()}>
           <button onClick={() => handleDeleteClick()} className="w-full px-4 py-2 text-left text-red-400 hover:bg-slate-700 transition-colors flex items-center gap-2"><Trash2 className="w-4 h-4" /> Delete {contextMenu.type}</button>
+        </div>
+      )}
+
+      {/* Meeting Detail Modal */}
+      {isMeetingDetailModalOpen && (
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsMeetingDetailModalOpen(false);
+            }
+          }}
+        >
+          <div
+            className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col my-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-slate-700/50 bg-slate-900/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center">
+                  <Calendar className="w-5 h-5 text-cyan-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Meeting Details</h2>
+                  <p className="text-sm text-slate-400">View meeting information and attendance</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsMeetingDetailModalOpen(false)}
+                className="text-slate-400 hover:text-white transition-colors p-2 hover:bg-slate-700 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content - Scrollable */}
+            <div className="overflow-y-auto flex-1 p-6">
+              {fetchingMeetingDetails ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
+                  <span className="ml-3 text-slate-400">Loading meeting details...</span>
+                </div>
+              ) : currentMeetingDetails ? (
+                <div className="space-y-6">
+                  {/* Basic Info */}
+                  <div className="bg-slate-900/50 border border-slate-700/50 rounded-xl p-6">
+                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-cyan-400" />
+                      Meeting Information
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-slate-400 text-sm mb-1">Title</p>
+                        <p className="text-white font-semibold">{currentMeetingDetails.title || "N/A"}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 text-sm mb-1">Status</p>
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300">
+                          {currentMeetingDetails.status || "N/A"}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 text-sm mb-1 flex items-center gap-1">
+                          <Clock className="w-4 h-4" />
+                          Start Time
+                        </p>
+                        <p className="text-white">
+                          {currentMeetingDetails.dateTime
+                            ? new Date(currentMeetingDetails.dateTime).toLocaleString()
+                            : "N/A"}
+                        </p>
+                      </div>
+                      {currentMeetingDetails.endTime && (
+                        <div>
+                          <p className="text-slate-400 text-sm mb-1 flex items-center gap-1">
+                            <Clock className="w-4 h-4" />
+                            End Time
+                          </p>
+                          <p className="text-white">
+                            {new Date(currentMeetingDetails.endTime).toLocaleString()}
+                          </p>
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-slate-400 text-sm mb-1 flex items-center gap-1">
+                          <MapPin className="w-4 h-4" />
+                          Location
+                        </p>
+                        <p className="text-white">{currentMeetingDetails.location || "N/A"}</p>
+                      </div>
+                      {currentMeetingDetails.onlineLink && (
+                        <div>
+                          <p className="text-slate-400 text-sm mb-1">Online Link</p>
+                          <a
+                            href={currentMeetingDetails.onlineLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-cyan-400 hover:text-cyan-300 underline break-all"
+                          >
+                            {currentMeetingDetails.onlineLink}
+                          </a>
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-slate-400 text-sm mb-1">Priority</p>
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${currentMeetingDetails.priority === "Urgent" ? "bg-red-500/20 text-red-300" :
+                            currentMeetingDetails.priority === "High" ? "bg-orange-500/20 text-orange-300" :
+                              currentMeetingDetails.priority === "Medium" ? "bg-yellow-500/20 text-yellow-300" :
+                                "bg-green-500/20 text-green-300"
+                          }`}>
+                          {currentMeetingDetails.priority || "Medium"}
+                        </span>
+                      </div>
+                    </div>
+                    {currentMeetingDetails.description && (
+                      <div className="mt-4">
+                        <p className="text-slate-400 text-sm mb-1">Description</p>
+                        <p className="text-white">{currentMeetingDetails.description}</p>
+                      </div>
+                    )}
+                    {currentMeetingDetails.agenda && (
+                      <div className="mt-4">
+                        <p className="text-slate-400 text-sm mb-1">Agenda</p>
+                        <p className="text-white whitespace-pre-wrap">{currentMeetingDetails.agenda}</p>
+                      </div>
+                    )}
+                    {currentMeetingDetails.tags && currentMeetingDetails.tags.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-slate-400 text-sm mb-2">Tags</p>
+                        <div className="flex flex-wrap gap-2">
+                          {currentMeetingDetails.tags.map((tag, idx) => (
+                            <span key={idx} className="px-3 py-1 bg-pink-500/20 text-pink-300 rounded-full text-xs">
+                              {tag.name || tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Attendance */}
+                  {currentMeetingDetails.attendance && (
+                    <div className="bg-slate-900/50 border border-slate-700/50 rounded-xl p-6">
+                      <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <CheckSquare className="w-5 h-5 text-green-400" />
+                        Attendance - Participants List
+                      </h3>
+                      <div className="space-y-6">
+                        {currentMeetingDetails.attendance.present && currentMeetingDetails.attendance.present.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                              <p className="text-white font-semibold">
+                                Present ({currentMeetingDetails.attendance.present.length})
+                              </p>
+                            </div>
+                            <div className="bg-slate-800/50 border border-green-500/20 rounded-lg p-4">
+                              <ul className="space-y-2">
+                                {currentMeetingDetails.attendance.present.map((member, idx) => {
+                                  // Handle both member object format and direct user format
+                                  const memberData = member.member || member;
+                                  const userName = memberData.name || memberData.username || memberData.email || 'Unknown';
+                                  const userEmail = memberData.email || '';
+                                  const userRollNo = memberData.rollNo ? ` (${memberData.rollNo})` : '';
+                                  const userId = memberData._id || idx;
+
+                                  return (
+                                    <li key={userId} className="flex items-center gap-3 py-2 border-b border-slate-700/30 last:border-0">
+                                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                      <div className="flex-1">
+                                        <p className="text-white font-medium">
+                                          {userName}{userRollNo}
+                                        </p>
+                                        {userEmail && userName !== userEmail && (
+                                          <p className="text-slate-400 text-xs">{userEmail}</p>
+                                        )}
+                                        {memberData.year && memberData.division && (
+                                          <p className="text-slate-500 text-xs">{memberData.year} {memberData.division}</p>
+                                        )}
+                                      </div>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </div>
+                          </div>
+                        )}
+                        {(!currentMeetingDetails.attendance.present || currentMeetingDetails.attendance.present.length === 0) &&
+                          (!currentMeetingDetails.attendance.absent || currentMeetingDetails.attendance.absent.length === 0) && (
+                            <div className="text-center py-8">
+                              <AlertCircle className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                              <p className="text-slate-500 text-sm italic">No attendance data available</p>
+                            </div>
+                          )}
+                      </div>
+                    </div>
+                  )}
+                  {/* Debug Info */}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <AlertCircle className="w-12 h-12 text-slate-600 mb-3" />
+                  <p className="text-slate-400">Failed to load meeting details</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-slate-700/50 bg-slate-900/50">
+              <button
+                onClick={() => setIsMeetingDetailModalOpen(false)}
+                className="w-full px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Task Detail Modal */}
+      {isTaskDetailModalOpen && (
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsTaskDetailModalOpen(false);
+            }
+          }}
+        >
+          <div
+            className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col my-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-slate-700/50 bg-slate-900/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-orange-500/20 rounded-xl flex items-center justify-center">
+                  <CheckSquare className="w-5 h-5 text-orange-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Task Details</h2>
+                  <p className="text-sm text-slate-400">View task information and assigned members</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsTaskDetailModalOpen(false)}
+                className="text-slate-400 hover:text-white transition-colors p-2 hover:bg-slate-700 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content - Scrollable */}
+            <div className="overflow-y-auto flex-1 p-6">
+              {fetchingTaskDetails ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
+                  <span className="ml-3 text-slate-400">Loading task details...</span>
+                </div>
+              ) : currentTaskDetails ? (
+                <div className="space-y-6">
+                  {/* Basic Info */}
+                  <div className="bg-slate-900/50 border border-slate-700/50 rounded-xl p-6">
+                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                      <CheckSquare className="w-5 h-5 text-orange-400" />
+                      Task Information
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-slate-400 text-sm mb-1">Title</p>
+                        <p className="text-white font-semibold">{currentTaskDetails.title || "N/A"}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400 text-sm mb-1">Status</p>
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300">
+                          {currentTaskDetails.status || "N/A"}
+                        </span>
+                      </div>
+                      {currentTaskDetails.team && (
+                        <div>
+                          <p className="text-slate-400 text-sm mb-1">Team</p>
+                          <p className="text-white">{typeof currentTaskDetails.team === 'object' ? currentTaskDetails.team.name : currentTaskDetails.team}</p>
+                        </div>
+                      )}
+                      {currentTaskDetails.deadline && (
+                        <div>
+                          <p className="text-slate-400 text-sm mb-1 flex items-center gap-1">
+                            <Clock className="w-4 h-4" />
+                            Deadline
+                          </p>
+                          <p className="text-white">
+                            {new Date(currentTaskDetails.deadline).toLocaleString()}
+                          </p>
+                        </div>
+                      )}
+                      {currentTaskDetails.priority && (
+                        <div>
+                          <p className="text-slate-400 text-sm mb-1">Priority</p>
+                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                            currentTaskDetails.priority === "Urgent" ? "bg-red-500/20 text-red-300" :
+                            currentTaskDetails.priority === "High" ? "bg-orange-500/20 text-orange-300" :
+                            currentTaskDetails.priority === "Medium" ? "bg-yellow-500/20 text-yellow-300" :
+                            "bg-green-500/20 text-green-300"
+                          }`}>
+                            {currentTaskDetails.priority}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {currentTaskDetails.description && (
+                      <div className="mt-4">
+                        <p className="text-slate-400 text-sm mb-1">Description</p>
+                        <p className="text-white whitespace-pre-wrap">{currentTaskDetails.description}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Subtasks */}
+                  {currentTaskDetails.subtasks && currentTaskDetails.subtasks.length > 0 && (
+                    <div className="bg-slate-900/50 border border-slate-700/50 rounded-xl p-6">
+                      <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <Briefcase className="w-5 h-5 text-orange-400" />
+                        Subtasks ({currentTaskDetails.subtasks.length})
+                      </h3>
+                      <div className="space-y-4">
+                        {currentTaskDetails.subtasks.map((subtask, idx) => (
+                          <div key={subtask._id || idx} className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4">
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="flex-1">
+                                <p className="text-white font-semibold mb-1">{subtask.title || "Untitled Subtask"}</p>
+                                {subtask.description && (
+                                  <p className="text-slate-400 text-sm">{subtask.description}</p>
+                                )}
+                              </div>
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                subtask.status === "Completed" ? "bg-green-500/20 text-green-300" :
+                                subtask.status === "In Progress" ? "bg-yellow-500/20 text-yellow-300" :
+                                "bg-slate-500/20 text-slate-300"
+                              }`}>
+                                {subtask.status || "Pending"}
+                              </span>
+                            </div>
+                            
+                            {/* Assigned Members */}
+                            <div className="mt-3 pt-3 border-t border-slate-700/50">
+                              <p className="text-slate-300 text-sm mb-3 flex items-center gap-2 font-semibold">
+                                <UsersIcon className="w-4 h-4 text-orange-400" />
+                                Assigned To
+                                {(subtask.assignedTo || subtask.assignedMembers) && (subtask.assignedTo || subtask.assignedMembers).length > 0 && (
+                                  <span className="text-slate-400 font-normal">({(subtask.assignedTo || subtask.assignedMembers).length} member{(subtask.assignedTo || subtask.assignedMembers).length !== 1 ? 's' : ''})</span>
+                                )}
+                              </p>
+                              {(subtask.assignedTo || subtask.assignedMembers) && (subtask.assignedTo || subtask.assignedMembers).length > 0 ? (
+                                <div className="bg-slate-900/50 border border-slate-700/30 rounded-lg p-4">
+                                  <ul className="space-y-2">
+                                    {(subtask.assignedTo || subtask.assignedMembers || []).map((member, memberIdx) => {
+                                      // Handle both populated member objects and direct member data
+                                      const memberData = member.member || member;
+                                      const memberName = memberData.name || memberData.username || memberData.email || 'Unknown';
+                                      const memberEmail = memberData.email || '';
+                                      const memberRollNo = memberData.rollNo ? ` (${memberData.rollNo})` : '';
+                                      const memberId = memberData._id || memberIdx;
+                                      
+                                      return (
+                                        <li key={memberId} className="flex items-center gap-3 py-2 border-b border-slate-700/30 last:border-0">
+                                          <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                                          <div className="flex-1">
+                                            <p className="text-white text-sm font-medium">
+                                              {memberName}{memberRollNo}
+                                            </p>
+                                            {memberEmail && memberName !== memberEmail && (
+                                              <p className="text-slate-400 text-xs">{memberEmail}</p>
+                                            )}
+                                            {memberData.year && memberData.division && (
+                                              <p className="text-slate-500 text-xs">{memberData.year} {memberData.division}</p>
+                                            )}
+                                          </div>
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+                                </div>
+                              ) : (
+                                <div className="bg-slate-900/30 border border-slate-700/20 rounded-lg p-3 text-center">
+                                  <p className="text-slate-500 text-sm italic">No members assigned to this subtask</p>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {subtask.deadline && (
+                              <div className="mt-2 text-xs text-slate-400 flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                Deadline: {new Date(subtask.deadline).toLocaleDateString()}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(!currentTaskDetails.subtasks || currentTaskDetails.subtasks.length === 0) && (
+                    <div className="bg-slate-900/50 border border-slate-700/50 rounded-xl p-6 text-center">
+                      <Briefcase className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                      <p className="text-slate-400">No subtasks assigned to this task</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <AlertCircle className="w-12 h-12 text-slate-600 mb-3" />
+                  <p className="text-slate-400">Failed to load task details</p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-slate-700/50 bg-slate-900/50">
+              <button
+                onClick={() => setIsTaskDetailModalOpen(false)}
+                className="w-full px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
