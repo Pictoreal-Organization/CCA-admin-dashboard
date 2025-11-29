@@ -710,7 +710,8 @@ export default function Dashboard() {
   const [meetings, setMeetings] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [tags, setTags] = useState([]); // ✅ New Tags State
-  const [userSortOrder, setUserSortOrder] = useState("asc"); // "asc" or "desc"
+  const [teams, setTeams] = useState([]); // Teams for filtering
+  const [selectedTeamFilter, setSelectedTeamFilter] = useState("all"); // Team filter for members section
 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("users");
@@ -747,7 +748,7 @@ export default function Dashboard() {
     const fetchAllData = async () => {
       try {
         // Added tags fetch to the Promise.all
-        const [usersRes, membersRes, headsRes, meetingsRes, tasksRes, tagsRes] =
+        const [usersRes, membersRes, headsRes, meetingsRes, tasksRes, tagsRes, teamsRes] =
           await Promise.all([
             api.get("/admin/users", { headers: { Authorization: `Bearer ${token}` } }),
             api.get("/admin/members", { headers: { Authorization: `Bearer ${token}` } }),
@@ -755,6 +756,7 @@ export default function Dashboard() {
             api.get("/admin/meetings", { headers: { Authorization: `Bearer ${token}` } }),
             api.get("/admin/tasks", { headers: { Authorization: `Bearer ${token}` } }),
             api.get("/tags", { headers: { Authorization: `Bearer ${token}` } }), // ✅ Fetch Tags
+            api.get("/admin/visible-teams", { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] })), // Fetch Teams
           ]);
 
         setUsers(usersRes.data || []);
@@ -763,6 +765,7 @@ export default function Dashboard() {
         setMeetings(meetingsRes.data || []);
         setTasks(tasksRes.data || []);
         setTags(tagsRes.data || []); // ✅ Set Tags
+        setTeams(teamsRes.data || []); // Set Teams
         console.log("Meetings fetched:", meetingsRes.data?.length || 0, "meetings");
         setLoading(false);
       } catch (err) {
@@ -955,19 +958,24 @@ export default function Dashboard() {
     );
   };
 
-  const filteredUsers = filterData(users, ["username","name", "email", "role", "year", "division"]);
-  const filteredMembers = filterData(members, ["username","name", "email", "team", "year", "division"]);
-  const filteredHeads = filterData(heads, ["username", "name","email", "team"]);
+  const filteredUsers = filterData(users, ["username","name", "rollNo", "email", "role", "year", "division"]);
+  const filteredMembersBase = filterData(members, ["username","name", "rollNo", "email", "team", "year", "division"]);
+  
+  // Apply team filter to members
+  const filteredMembers = selectedTeamFilter === "all" 
+    ? filteredMembersBase 
+    : filteredMembersBase.filter(member => {
+        if (!member.team || member.team.length === 0) return false;
+        return member.team.some(team => {
+          const teamId = typeof team === 'object' ? team._id : team;
+          return teamId === selectedTeamFilter;
+        });
+      });
+  
+  const filteredHeads = filterData(heads, ["username", "name", "rollNo", "email", "team"]);
   const filteredMeetings = filterData(meetings, ["title", "location", "status", "priority", "tags"]);
   const filteredTasks = filterData(tasks, ["title", "team.name", "status"]);
   const filteredTags = filterData(tags, ["name"]); // ✅ Filter Tags
-
-  const sortedUsers = [...filteredUsers].sort((a, b) => {
-    const nameA = (a.name || "").toLowerCase();
-    const nameB = (b.name || "").toLowerCase();
-    if (userSortOrder === "asc") return nameA.localeCompare(nameB);
-    return nameB.localeCompare(nameA);
-  });
 
   const handleMeetingClick = async (meetingId) => {
     setFetchingMeetingDetails(true);
@@ -1136,6 +1144,7 @@ export default function Dashboard() {
                   <thead className="bg-slate-900/50">
                     <tr>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Name</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Roll No</th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Role</th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Division</th>
                     </tr>
@@ -1147,6 +1156,7 @@ export default function Dashboard() {
                             <div className="text-white font-medium">{u.name}</div>
                             <div className="text-xs text-slate-400">{u.email}</div>
                           </td>
+                          <td className="px-6 py-4 text-slate-300">{u.rollNo || "N/A"}</td>
                           <td className="px-6 py-4">
                             <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${u.role === "Admin" ? "bg-purple-500/20 text-purple-300" : u.role === "Head" ? "bg-blue-500/20 text-blue-300" : "bg-green-500/20 text-green-300"}`}>{u.role}</span>
                           </td>
@@ -1166,7 +1176,24 @@ export default function Dashboard() {
                     <tr>
                       <th className="px-6 py-4 w-8"></th>
                       <th className="px-6 py-4 text-left text-sm text-slate-300">Name</th>
-                      <th className="px-6 py-4 text-left text-sm text-slate-300">Teams</th>
+                      <th className="px-6 py-4 text-left text-sm text-slate-300">
+                        <div className="flex items-center gap-2">
+                          <span>Teams</span>
+                          <select
+                            value={selectedTeamFilter}
+                            onChange={(e) => setSelectedTeamFilter(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="ml-2 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-green-500"
+                          >
+                            <option value="all">All Teams</option>
+                            {teams.map((team) => (
+                              <option key={team._id} value={team._id}>
+                                {team.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </th>
                       <th className="px-6 py-4 text-left text-sm text-slate-300">Division</th>
                       <th className="px-6 py-4 text-center text-sm text-slate-300">Meetings <br/><span className="text-[10px] text-slate-500">(U/H/M/L)</span></th>
                       <th className="px-6 py-4 text-center text-sm text-slate-300">Tasks</th>
@@ -1322,7 +1349,7 @@ export default function Dashboard() {
                               {new Date(meeting.dateTime).toLocaleString()}
                             </td>
                             <td className="px-6 py-4 text-slate-300">
-                              {meeting.location || "N/A"}
+                              {meeting.location || (meeting.onlineLink ? "Online" : "N/A")}
                             </td>
                             <td className="px-6 py-4">
                               <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300">
@@ -1355,6 +1382,7 @@ export default function Dashboard() {
                           <th className="px-6 py-4 text-left text-sm text-slate-300">Team</th>
                           <th className="px-6 py-4 text-left text-sm text-slate-300">Status</th>
                           <th className="px-6 py-4 text-left text-sm text-slate-300">Deadline</th>
+                          <th className="px-6 py-4 text-left text-sm text-slate-300">Completed Date</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-700/50">
@@ -1374,6 +1402,9 @@ export default function Dashboard() {
                             </td>
                             <td className="px-6 py-4 text-slate-300">
                               {task.deadline ? new Date(task.deadline).toLocaleDateString() : "No deadline"}
+                            </td>
+                            <td className="px-6 py-4 text-slate-300">
+                              {task.completedAt ? new Date(task.completedAt).toLocaleDateString() : "N/A"}
                             </td>
                           </tr>
                         ))}
@@ -1597,7 +1628,6 @@ export default function Dashboard() {
                             <div className="bg-slate-800/50 border border-green-500/20 rounded-lg p-4">
                               <ul className="space-y-2">
                                 {currentMeetingDetails.attendance.present.map((member, idx) => {
-                                  // Handle both member object format and direct user format
                                   const memberData = member.member || member;
                                   const userName = memberData.name || memberData.username || memberData.email || 'Unknown';
                                   const userEmail = memberData.email || '';
@@ -1795,7 +1825,6 @@ export default function Dashboard() {
                                 <div className="bg-slate-900/50 border border-slate-700/30 rounded-lg p-4">
                                   <ul className="space-y-2">
                                     {(subtask.assignedTo || subtask.assignedMembers || []).map((member, memberIdx) => {
-                                      // Handle both populated member objects and direct member data
                                       const memberData = member.member || member;
                                       const memberName = memberData.name || memberData.username || memberData.email || 'Unknown';
                                       const memberEmail = memberData.email || '';
