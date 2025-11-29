@@ -19,7 +19,7 @@ export default function CreateMember() {
   const [teams, setTeams] = useState([]);
   const [selectedTeams, setSelectedTeams] = useState([]);
   const [name, setName] = useState(""); 
-  const [rollno, setRollno] = useState("");
+  const [rollNo, setRollNo] = useState("");
   const [year, setYear] = useState("");
   const [division, setDivision] = useState("");
   const [phone, setPhone] = useState("");
@@ -67,7 +67,7 @@ export default function CreateMember() {
           username,
           email,
           name,
-          rollno,
+          rollNo,
           year,
           division,
           phone,
@@ -81,7 +81,7 @@ export default function CreateMember() {
       setUsername("");
       setEmail("");
       setName("");
-      setRollno("");
+      setRollNo("");
       setYear("");
       setDivision("");
       setPhone("");
@@ -212,8 +212,8 @@ export default function CreateMember() {
               </label>
               <input
                 type="text"
-                value={rollno}
-                onChange={(e) => setRollno(e.target.value)}
+                value={rollNo}
+                onChange={(e) => setRollNo(e.target.value)}
                 required
                 className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-xl  text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                 placeholder="Enter roll number"
