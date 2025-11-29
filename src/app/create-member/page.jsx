@@ -18,6 +18,12 @@ export default function CreateMember() {
   const [email, setEmail] = useState("");
   const [teams, setTeams] = useState([]);
   const [selectedTeams, setSelectedTeams] = useState([]);
+  const [name, setName] = useState(""); 
+  const [rollno, setRollno] = useState("");
+  const [year, setYear] = useState("");
+  const [division, setDivision] = useState("");
+  const [phone, setPhone] = useState("");
+
   const [msg, setMsg] = useState("");
   const [msgType, setMsgType] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -60,6 +66,11 @@ export default function CreateMember() {
         {
           username,
           email,
+          name,
+          rollno,
+          year,
+          division,
+          phone,
           teamIds: selectedTeams,
         },
         { headers: { Authorization: `Bearer ${token}` } }
@@ -69,6 +80,11 @@ export default function CreateMember() {
       setMsgType("success");
       setUsername("");
       setEmail("");
+      setName("");
+      setRollno("");
+      setYear("");
+      setDivision("");
+      setPhone("");
       setSelectedTeams([]);
     } catch (err) {
       setMsg(err.response?.data?.msg || "Error creating member");
@@ -172,7 +188,84 @@ export default function CreateMember() {
               </div>
             </div>
 
-            {/* Teams Selection */}
+            {/* Full Name */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Full Name
+              </label>
+              <div className="relative">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}            
+                  className="w-full pl-12 pr-4 py-3 bg-slate-900/50 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="Enter full name"
+                />
+              </div>
+            </div>
+
+            {/* Roll Number */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Roll Number
+              </label>
+              <input
+                type="text"
+                value={rollno}
+                onChange={(e) => setRollno(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-xl  text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                placeholder="Enter roll number"
+              />
+            </div>
+
+            {/* Year */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Year
+              </label>
+              <input
+                type="text"
+                value={year}
+                onChange={(e) => setYear(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-xl  text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                placeholder="e.g., FY / SY / TE / BE"
+              />
+            </div>
+
+            {/* Division */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Division
+              </label>
+              <input
+                type="text"
+                value={division}
+                onChange={(e) => setDivision(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-xl  text-white placeholder-slate-500 focus:outline-none focus:ring-2  focus:ring-blue-500 transition-all"
+                placeholder="Enter division"
+              />
+            </div>
+
+            {/* Phone Number */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Phone Number
+              </label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                required
+                className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-xl  text-white placeholder-slate-500 focus:outline-none focus:ring-2  focus:ring-blue-500 transition-all"
+                placeholder="Enter phone number"
+              />
+            </div>
+
+            {/* Team Selection */}
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-3">
                 Assign Teams
