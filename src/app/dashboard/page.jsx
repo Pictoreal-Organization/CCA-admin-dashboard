@@ -698,7 +698,8 @@ import {
   X,
   MapPin,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Edit
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -1587,6 +1588,17 @@ export default function Dashboard() {
 
       {contextMenu && (
         <div className="fixed bg-slate-800 border border-slate-700 rounded-lg shadow-2xl py-2 z-50" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(e) => e.stopPropagation()}>
+          {contextMenu.type === "member" && (
+            <button 
+              onClick={() => {
+                router.push(`/edit-member?id=${contextMenu.item._id}`);
+                setContextMenu(null);
+              }} 
+              className="w-full px-4 py-2 text-left text-blue-400 hover:bg-slate-700 transition-colors flex items-center gap-2"
+            >
+              <Edit className="w-4 h-4" /> Edit Member
+            </button>
+          )}
           <button onClick={() => handleDeleteClick()} className="w-full px-4 py-2 text-left text-red-400 hover:bg-slate-700 transition-colors flex items-center gap-2"><Trash2 className="w-4 h-4" /> Delete {contextMenu.type}</button>
         </div>
       )}
