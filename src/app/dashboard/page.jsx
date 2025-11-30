@@ -712,6 +712,7 @@ export default function Dashboard() {
   const [tags, setTags] = useState([]); // ✅ New Tags State
   const [teams, setTeams] = useState([]); // Teams for filtering
   const [selectedTeamFilter, setSelectedTeamFilter] = useState("all"); // Team filter for members section
+  const [userSortOrder, setUserSortOrder] = useState("asc");
 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("users");
@@ -721,6 +722,10 @@ export default function Dashboard() {
   const [expandedUserId, setExpandedUserId] = useState(null);
   const [newTagName, setNewTagName] = useState(""); // ✅ State for adding tag
   const [isAddingTag, setIsAddingTag] = useState(false);
+
+  const [memberAttendance, setMemberAttendance] = useState({}); // Store attendance data for each member
+  const [loadingAttendance, setLoadingAttendance] = useState({}); // Track loading state for each member
+
 
   // Modals & Context Menu
   const [contextMenu, setContextMenu] = useState(null);
@@ -782,6 +787,55 @@ export default function Dashboard() {
     fetchAllData();
   }, [router]);
 
+    // Fetch attendance for all members when members tab is active
+  useEffect(() => {
+    const fetchAllMembersAttendance = async () => {
+      if (activeTab !== "members" || members.length === 0) return;
+      
+      const token = localStorage.getItem("adminToken");
+      if (!token) return;
+
+      // Use functional update to check current state
+      setMemberAttendance(currentAttendance => {
+        // Fetch attendance for members that haven't been fetched yet
+        const membersToFetch = members.filter(member => !currentAttendance[member._id]);
+        
+        if (membersToFetch.length === 0) return currentAttendance; // All already fetched
+
+        // Fetch attendance for all members in parallel
+        const attendancePromises = membersToFetch.map(async (member) => {
+          try {
+            const res = await api.get(`/attendance/member/${member._id}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            return { memberId: member._id, data: res.data || [] };
+          } catch (err) {
+            console.error(`Failed to fetch attendance for member ${member._id}:`, err);
+            return { memberId: member._id, data: [] };
+          }
+        });
+
+        Promise.all(attendancePromises).then(results => {
+          // Update state with all attendance data
+          setMemberAttendance(prevAttendance => {
+            const newAttendance = { ...prevAttendance };
+            results.forEach(({ memberId, data }) => {
+              if (memberId) {
+                newAttendance[memberId] = data;
+              }
+            });
+            return newAttendance;
+          });
+        });
+
+        return currentAttendance; // Return current state immediately
+      });
+    };
+
+    fetchAllMembersAttendance();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, members.length]); // Fetch when members tab is active or members list changes
+
   useEffect(() => {
     const handleClick = () => setContextMenu(null);
     document.addEventListener("click", handleClick);
@@ -810,17 +864,25 @@ export default function Dashboard() {
   };
 
   // --- STATS & DETAILS LOGIC ---
-  const getUserStats = (userId) => {
+    const getUserStats = (userId) => {
     const meetingCounts = { Urgent: 0, High: 0, Medium: 0, Low: 0 };
     
+    // Get attendance data for this member
+    const attendanceData = memberAttendance[userId] || [];
+    
+    // Extract meeting IDs where the member is marked as present
+    const presentMeetingIds = attendanceData
+      .map(att => {
+        const meetingId = att.meeting?._id || att.meeting;
+        return meetingId ? String(meetingId) : null;
+      })
+      .filter(Boolean);
+    
+    // Count only meetings where member is marked as present
     meetings.forEach((meet) => {
-      const isInvited = meet.invitedMembers?.some((m) => (m._id || m) === userId);
-      const isInTeam = meet.team?.some((t) => 
-        t.members?.some((m) => (m._id || m) === userId) ||
-        t.heads?.some((h) => (h._id || h) === userId)
-      );
-
-      if (isInvited || isInTeam) {
+      const isPresent = presentMeetingIds.includes(String(meet._id));
+      
+      if (isPresent) {
         const priority = meet.priority || "Medium"; 
         if (meetingCounts[priority] !== undefined) meetingCounts[priority]++;
       }
@@ -838,12 +900,21 @@ export default function Dashboard() {
   };
 
   const getMemberDetails = (userId) => {
+    // Get attendance data for this member
+    const attendanceData = memberAttendance[userId] || [];
+    
+    // Extract meeting IDs where the member is marked as present
+    // Handle both populated objects and ObjectId strings
+    const presentMeetingIds = attendanceData
+      .map(att => {
+        const meetingId = att.meeting?._id || att.meeting;
+        return meetingId ? String(meetingId) : null;
+      })
+      .filter(Boolean);
+    
+    // Filter meetings to show only those where member is present
     const userMeetings = meetings.filter((meet) => {
-      const isInvited = meet.invitedMembers?.some((m) => (m._id || m) === userId);
-      const isInTeam = meet.team?.some((t) => 
-        t.members?.some((m) => (m._id || m) === userId)
-      );
-      return isInvited || isInTeam;
+      return presentMeetingIds.includes(String(meet._id));
     });
 
     const userTasks = tasks.map(task => {
@@ -858,6 +929,36 @@ export default function Dashboard() {
     }).filter(t => t !== null);
 
     return { userMeetings, userTasks };
+  };
+
+   const fetchMemberAttendance = async (memberId) => {
+    // If already fetched, don't fetch again
+    if (memberAttendance[memberId]) {
+      return;
+    }
+
+    setLoadingAttendance(prev => ({ ...prev, [memberId]: true }));
+    const token = localStorage.getItem("adminToken");
+    
+    try {
+      const res = await api.get(`/attendance/member/${memberId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setMemberAttendance(prev => ({
+        ...prev,
+        [memberId]: res.data || []
+      }));
+    } catch (err) {
+      console.error("Failed to fetch member attendance:", err);
+      // Set empty array on error
+      setMemberAttendance(prev => ({
+        ...prev,
+        [memberId]: []
+      }));
+    } finally {
+      setLoadingAttendance(prev => ({ ...prev, [memberId]: false }));
+    }
   };
 
   const toggleExpand = (userId) => {
@@ -976,6 +1077,13 @@ export default function Dashboard() {
   const filteredMeetings = filterData(meetings, ["title", "location", "status", "priority", "tags"]);
   const filteredTasks = filterData(tasks, ["title", "team.name", "status"]);
   const filteredTags = filterData(tags, ["name"]); // ✅ Filter Tags
+
+  const sortedUsers = [...filteredUsers].sort((a, b) => {
+    const nameA = (a.name || "").toLowerCase();
+    const nameB = (b.name || "").toLowerCase();
+    if (userSortOrder === "asc") return nameA.localeCompare(nameB);
+    return nameB.localeCompare(nameA);
+  });
 
   const handleMeetingClick = async (meetingId) => {
     setFetchingMeetingDetails(true);
@@ -1194,7 +1302,7 @@ export default function Dashboard() {
                           </select>
                         </div>
                       </th>
-                      <th className="px-6 py-4 text-left text-sm text-slate-300">Division</th>
+                      <th className="px-6 py-4 text-left text-sm text-slate-300">Department</th>
                       <th className="px-6 py-4 text-center text-sm text-slate-300">Meetings <br/><span className="text-[10px] text-slate-500">(U/H/M/L)</span></th>
                       <th className="px-6 py-4 text-center text-sm text-slate-300">Tasks</th>
                     </tr>
@@ -1246,21 +1354,33 @@ export default function Dashboard() {
                                       <Calendar className="w-5 h-5" />
                                       <h3 className="font-bold">Meetings Attended</h3>
                                     </div>
-                                    {userMeetings.length > 0 ? (
+                                    {loadingAttendance[m._id] ? (
+                                      <div className="flex items-center justify-center py-8">
+                                        <Loader2 className="w-6 h-6 text-cyan-400 animate-spin" />
+                                        <span className="ml-2 text-slate-400">Loading attendance...</span>
+                                      </div>
+                                    ) : userMeetings.length > 0 ? (
                                       <ul className="space-y-3">
                                         {userMeetings.map(meet => (
                                           <li key={meet._id} className="p-3 bg-slate-900/50 rounded-lg border border-slate-700/50">
                                             <div className="font-medium text-white mb-1">{meet.title}</div>
-                                            <div className="text-xs text-slate-400 flex flex-wrap gap-1">
-                                              <UsersIcon className="w-3 h-3 mr-1 inline" />
-                                              <span className="font-semibold">Invited:</span> 
-                                              {meet.invitedMembers?.map(u => (u.username || u.email)).join(", ") || "All Team Members"}
-                                            </div>
+                                            {meet.dateTime && (
+                                              <div className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                                                <Clock className="w-3 h-3" />
+                                                {new Date(meet.dateTime).toLocaleString()}
+                                              </div>
+                                            )}
+                                            {meet.location && (
+                                              <div className="text-xs text-slate-400 flex items-center gap-1">
+                                                <MapPin className="w-3 h-3" />
+                                                {meet.location}
+                                              </div>
+                                            )}
                                           </li>
                                         ))}
                                       </ul>
                                     ) : (
-                                      <p className="text-slate-500 text-sm italic">No meetings found.</p>
+                                      <p className="text-slate-500 text-sm italic">No meetings attended (marked as present).</p>
                                     )}
                                   </div>
                                   <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700/50">
@@ -1304,7 +1424,7 @@ export default function Dashboard() {
                 </table>
               )}</>
             )}
-
+                                    
             {/* === HEADS TAB === */}
             {activeTab === "heads" && (
               <>{filteredHeads.length === 0 ? <div className="px-6 py-12 text-center"><UserCog className="w-12 h-12 text-slate-600 mx-auto mb-3" /><p className="text-slate-400">No heads found</p></div> : (
