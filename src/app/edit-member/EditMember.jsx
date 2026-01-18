@@ -11,7 +11,6 @@ import {
   AlertCircle,
   Loader2,
   Edit,
-  Shield,
 } from "lucide-react";
 
 export default function EditMember() {
@@ -21,10 +20,6 @@ export default function EditMember() {
 
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
-  const [roles, setRoles] = useState([]); // ✅ Store available roles
-  const [selectedRole, setSelectedRole] = useState(""); // ✅ Selected Role ID
-  const [tags, setTags] = useState([]); // ✅ Store available tags
-  const [selectedTag, setSelectedTag] = useState(""); // ✅ Selected Tag ID
   const [teams, setTeams] = useState([]);
   const [selectedTeams, setSelectedTeams] = useState([]);
   const [name, setName] = useState("");
@@ -55,16 +50,11 @@ export default function EditMember() {
       }
 
       try {
-        // Fetch all visible teams, ROLES, and TAGS
-        const [teamsRes, rolesRes, tagsRes] = await Promise.all([
-          api.get("/admin/visible-teams", { headers: { Authorization: `Bearer ${token}` } }),
-          api.get("/roles", { headers: { Authorization: `Bearer ${token}` } }),
-          api.get("/tags", { headers: { Authorization: `Bearer ${token}` } })
-        ]);
-        
+        // Fetch all visible teams
+        const teamsRes = await api.get("/admin/visible-teams", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         setTeams(teamsRes.data || []);
-        setRoles(rolesRes.data || []);
-        setTags(tagsRes.data || []);
 
         // Try single-member endpoint
         let member = null;
@@ -98,21 +88,6 @@ export default function EditMember() {
         // Populate fields
         setUsername(member.username || "");
         setEmail(member.email || "");
-        
-        // Handle Role (It might be populated or an ID)
-        if (member.role && typeof member.role === 'object') {
-             setSelectedRole(member.role._id);
-        } else {
-             // If it's a string (legacy "Head" etc), try to find matching role object by name? 
-             // Ideally backend migration handled this. Let's assume ID or Name match.
-             // If member.role is just an ID string:
-             setSelectedRole(member.role || "");
-        }
-
-        // Handle Tag
-        if (member.tag) {
-            setSelectedTag(typeof member.tag === 'object' ? member.tag._id : member.tag);
-        }
         setName(member.name || "");
         setRollNo(member.rollNo || "");
         setYear(member.year || "");
@@ -159,8 +134,6 @@ export default function EditMember() {
         {
           username,
           email,
-          role: selectedRole, // ✅ Send Role
-          tag: selectedTag || null, // ✅ Send Tag (optional)
           name,
           rollNo,
           year,
@@ -269,52 +242,6 @@ export default function EditMember() {
               type="email"
             />
 
-
-
-            {/* Role Selection */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Role</label>
-              <div className="relative">
-                <Shield className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <select
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 bg-slate-900/50 border border-slate-600 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
-                >
-                  <option value="">Select a Role</option>
-                  {roles.map(r => (
-                    <option key={r._id} value={r._id}>{r.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Coordinator Tag Selection - Show only if Role is Coordinator */}
-            {roles.find(r => r._id === selectedRole)?.slug === 'coordinator' && (
-                <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl animate-in fade-in slide-in-from-top-2">
-                    <label className="block text-sm font-medium text-blue-300 mb-2">
-                        Coordinator Tag Assignment <span className="text-xs opacity-70">(Required)</span>
-                    </label>
-                    <div className="relative">
-                        <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-400" />
-                        <select
-                        value={selectedTag}
-                        onChange={(e) => setSelectedTag(e.target.value)}
-                        className="w-full pl-12 pr-4 py-3 bg-slate-900 border border-blue-500/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
-                        required
-                        >
-                        <option value="">Select a Tag to Manage</option>
-                        {tags.map(t => (
-                            <option key={t._id} value={t._id}>{t.name}</option>
-                        ))}
-                        </select>
-                    </div>
-                    <p className="text-xs text-blue-400/70 mt-2">
-                        This user will ONLY be able to manage meetings/tasks associated with this tag.
-                    </p>
-                </div>
-            )}
-
             <InputField
               label="Full Name"
               icon={User}
@@ -395,3 +322,40 @@ export default function EditMember() {
     </div>
   );
 }
+
+/* -----------------------------------------------
+   Small reusable input component (kept simple)
+------------------------------------------------- */
+function InputField({
+  label,
+  icon: Icon,
+  value,
+  setValue,
+  required,
+  type = "text",
+  placeholder,
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-300 mb-2">
+        {label}
+      </label>
+      <div className="relative">
+        {Icon && (
+          <Icon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+        )}
+        <input
+          type={type}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          required={required}
+          placeholder={placeholder}
+          className={`w-full ${
+            Icon ? "pl-12" : "px-4"
+          } pr-4 py-3 bg-slate-900/50 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all`}
+        />
+      </div>
+    </div>
+  );
+}
+
