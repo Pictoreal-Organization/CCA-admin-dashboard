@@ -1,4 +1,5 @@
 "use client";
+import { Suspense } from "react";
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "../../lib/api";
@@ -14,17 +15,18 @@ import {
   Shield,
 } from "lucide-react";
 
-export default function EditMember() {
+// Separate the component that uses useSearchParams
+function EditMemberContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const memberId = searchParams.get("id");
 
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
-  const [roles, setRoles] = useState([]); // ✅ Store available roles
-  const [selectedRole, setSelectedRole] = useState(""); // ✅ Selected Role ID
-  const [tags, setTags] = useState([]); // ✅ Store available tags
-  const [selectedTag, setSelectedTag] = useState(""); // ✅ Selected Tag ID
+  const [roles, setRoles] = useState([]);
+  const [selectedRole, setSelectedRole] = useState("");
+  const [tags, setTags] = useState([]);
+  const [selectedTag, setSelectedTag] = useState("");
   const [teams, setTeams] = useState([]);
   const [selectedTeams, setSelectedTeams] = useState([]);
   const [name, setName] = useState("");
@@ -38,150 +40,7 @@ export default function EditMember() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMember, setLoadingMember] = useState(true);
 
-  // Fetch member data & teams
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!memberId) {
-        setMsg("Member ID not provided");
-        setMsgType("error");
-        setLoadingMember(false);
-        return;
-      }
-
-      const token = localStorage.getItem("adminToken");
-      if (!token) {
-        router.push("/login");
-        return;
-      }
-
-      try {
-        // Fetch all visible teams, ROLES, and TAGS
-        const [teamsRes, rolesRes, tagsRes] = await Promise.all([
-          api.get("/admin/visible-teams", { headers: { Authorization: `Bearer ${token}` } }),
-          api.get("/roles", { headers: { Authorization: `Bearer ${token}` } }),
-          api.get("/tags", { headers: { Authorization: `Bearer ${token}` } })
-        ]);
-        
-        setTeams(teamsRes.data || []);
-        setRoles(rolesRes.data || []);
-        setTags(tagsRes.data || []);
-
-        // Try single-member endpoint
-        let member = null;
-        try {
-          const single = await api.get(`/admin/members/${memberId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          member = single.data;
-        } catch (err) {
-          console.log("Single-member endpoint failed. Using fallback...");
-
-          // Fallback: fetch all members
-          const allMembersRes = await api.get("/admin/members", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-
-          const allMembers = Array.isArray(allMembersRes.data)
-            ? allMembersRes.data
-            : [];
-
-          member = allMembers.find((m) => m._id === memberId);
-
-          if (!member) {
-            setMsg("Member not found");
-            setMsgType("error");
-            setLoadingMember(false);
-            return;
-          }
-        }
-
-        // Populate fields
-        setUsername(member.username || "");
-        setEmail(member.email || "");
-        
-        // Handle Role (It might be populated or an ID)
-        if (member.role && typeof member.role === 'object') {
-             setSelectedRole(member.role._id);
-        } else {
-             // If it's a string (legacy "Head" etc), try to find matching role object by name? 
-             // Ideally backend migration handled this. Let's assume ID or Name match.
-             // If member.role is just an ID string:
-             setSelectedRole(member.role || "");
-        }
-
-        // Handle Tag
-        if (member.tag) {
-            setSelectedTag(typeof member.tag === 'object' ? member.tag._id : member.tag);
-        }
-        setName(member.name || "");
-        setRollNo(member.rollNo || "");
-        setYear(member.year || "");
-        setDivision(member.division || "");
-        setPhone(member.phone || "");
-
-        // Handle team array
-        if (Array.isArray(member.team)) {
-          const ids = member.team.map((t) => (t._id ? t._id : t));
-          setSelectedTeams(ids);
-        }
-
-        setLoadingMember(false);
-      } catch (error) {
-        console.error(error);
-        setMsg("Failed to load member data");
-        setMsgType("error");
-        setLoadingMember(false);
-      }
-    };
-
-    fetchData();
-  }, [memberId, router]);
-
-  // Toggle team selection
-  const handleTeamSelect = (id) => {
-    setSelectedTeams((prev) =>
-      prev.includes(id) ? prev.filter((tid) => tid !== id) : [...prev, id]
-    );
-  };
-
-  // Submit updated member
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setMsg("");
-
-    const token = localStorage.getItem("adminToken");
-    if (!token) return;
-
-    try {
-      const res = await api.put(
-        `/admin/members/${memberId}`,
-        {
-          username,
-          email,
-          role: selectedRole, // ✅ Send Role
-          tag: selectedTag || null, // ✅ Send Tag (optional)
-          name,
-          rollNo,
-          year,
-          division,
-          phone,
-          team: selectedTeams,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      setMsg(res.data.msg || "Member updated successfully!");
-      setMsgType("success");
-
-      setTimeout(() => router.push("/dashboard"), 1500);
-    } catch (err) {
-      setMsg(err.response?.data?.msg || "Error updating member");
-      setMsgType("error");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // ... all your useEffect and handler functions ...
 
   if (loadingMember) {
     return (
@@ -393,5 +252,21 @@ export default function EditMember() {
         </div>
       </main>
     </div>
+  );
+}
+
+// Main component wrapped in Suspense
+export default function EditMember() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 text-blue-400 animate-spin mx-auto mb-4" />
+          <p className="text-slate-400">Loading...</p>
+        </div>
+      </div>
+    }>
+      <EditMemberContent />
+    </Suspense>
   );
 }
