@@ -40,7 +40,148 @@ function EditMemberContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMember, setLoadingMember] = useState(true);
 
-  // ... all your useEffect and handler functions ...
+  // Fetch member data & teams
+useEffect(() => {
+  const fetchData = async () => {
+    if (!memberId) {
+      setMsg("Member ID not provided");
+      setMsgType("error");
+      setLoadingMember(false);
+      return;
+    }
+
+    const token = localStorage.getItem("adminToken");
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+
+    try {
+      // Fetch all visible teams, ROLES, and TAGS
+      const [teamsRes, rolesRes, tagsRes] = await Promise.all([
+        api.get("/admin/visible-teams", { headers: { Authorization: `Bearer ${token}` } }),
+        api.get("/roles", { headers: { Authorization: `Bearer ${token}` } }),
+        api.get("/tags", { headers: { Authorization: `Bearer ${token}` } })
+      ]);
+      
+      setTeams(teamsRes.data || []);
+      setRoles(rolesRes.data || []);
+      setTags(tagsRes.data || []);
+
+      // Try single-member endpoint
+      let member = null;
+      try {
+        const single = await api.get(`/admin/members/${memberId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        member = single.data;
+      } catch (err) {
+        console.log("Single-member endpoint failed. Using fallback...");
+
+        // Fallback: fetch all members
+        const allMembersRes = await api.get("/admin/members", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const allMembers = Array.isArray(allMembersRes.data)
+          ? allMembersRes.data
+          : [];
+
+        member = allMembers.find((m) => m._id === memberId);
+
+        if (!member) {
+          setMsg("Member not found");
+          setMsgType("error");
+          setLoadingMember(false);
+          return;
+        }
+      }
+
+      // Populate fields
+      setUsername(member.username || "");
+      setEmail(member.email || "");
+      
+      // Handle Role
+      if (member.role && typeof member.role === 'object') {
+        setSelectedRole(member.role._id);
+      } else {
+        setSelectedRole(member.role || "");
+      }
+
+      // Handle Tag
+      if (member.tag) {
+        setSelectedTag(typeof member.tag === 'object' ? member.tag._id : member.tag);
+      }
+      
+      setName(member.name || "");
+      setRollNo(member.rollNo || "");
+      setYear(member.year || "");
+      setDivision(member.division || "");
+      setPhone(member.phone || "");
+
+      // Handle team array
+      if (Array.isArray(member.team)) {
+        const ids = member.team.map((t) => (t._id ? t._id : t));
+        setSelectedTeams(ids);
+      }
+
+      setLoadingMember(false);
+    } catch (error) {
+      console.error(error);
+      setMsg("Failed to load member data");
+      setMsgType("error");
+      setLoadingMember(false);
+    }
+  };
+
+  fetchData();
+}, [memberId, router]);
+
+// Toggle team selection
+const handleTeamSelect = (id) => {
+  setSelectedTeams((prev) =>
+    prev.includes(id) ? prev.filter((tid) => tid !== id) : [...prev, id]
+  );
+};
+
+// Submit updated member
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setIsLoading(true);
+  setMsg("");
+
+  const token = localStorage.getItem("adminToken");
+  if (!token) return;
+
+  try {
+    const res = await api.put(
+      `/admin/members/${memberId}`,
+      {
+        username,
+        email,
+        role: selectedRole,
+        tag: selectedTag || null,
+        name,
+        rollNo,
+        year,
+        division,
+        phone,
+        team: selectedTeams,
+      },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    setMsg(res.data.msg || "Member updated successfully!");
+    setMsgType("success");
+
+    setTimeout(() => router.push("/dashboard"), 1500);
+  } catch (err) {
+    setMsg(err.response?.data?.msg || "Error updating member");
+    setMsgType("error");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   if (loadingMember) {
     return (
@@ -251,6 +392,28 @@ function EditMemberContent() {
           </form>
         </div>
       </main>
+    </div>
+  );
+}
+
+// InputField component
+function InputField({ label, icon: Icon, value, setValue, required = false, type = "text", placeholder = "" }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-300 mb-2">
+        {label}
+      </label>
+      <div className="relative">
+        {Icon && <Icon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />}
+        <input
+          type={type}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          required={required}
+          placeholder={placeholder}
+          className={`w-full ${Icon ? 'pl-12' : 'pl-4'} pr-4 py-3 bg-slate-900/50 border border-slate-600 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500`}
+        />
+      </div>
     </div>
   );
 }
