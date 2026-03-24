@@ -83,7 +83,17 @@ export default function Dashboard() {
   const [roleForm, setRoleForm] = useState({ name: "", description: "", permissions: [] });
   const [isCreatingRole, setIsCreatingRole] = useState(false);
 
+  // Syncing sheet
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Bulk role selection
+  const [selectedUserIds, setSelectedUserIds] = useState(new Set());
+
+  const [bulkRoleModal, setBulkRoleModal] = useState(false);
+  const [bulkTargetRole, setBulkTargetRole] = useState("");
+  const [bulkSelectedTag, setBulkSelectedTag] = useState("");
+  const [bulkSelectedTeams, setBulkSelectedTeams] = useState([]);
+  const [isBulkChanging, setIsBulkChanging] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("adminToken");
@@ -285,6 +295,50 @@ export default function Dashboard() {
     } catch (err) {
       console.error(err);
       alert(err.response?.data?.msg || "Failed to delete role");
+    }
+  };
+
+  const openBulkRoleModal = () => {
+    if (selectedUserIds.size === 0) return;
+    setBulkTargetRole("");
+    setBulkSelectedTag("");
+    setBulkSelectedTeams([]);
+    setBulkRoleModal(true);
+  };
+  
+  const handleBulkChangeRole = async () => {
+    if (!bulkTargetRole) return alert("Please select a target role");
+    if (bulkTargetRole === "coordinator" && !bulkSelectedTag)
+      return alert("Please select a tag for coordinators");
+    if (bulkTargetRole === "head" && bulkSelectedTeams.length === 0)
+      return alert("Please select at least one team for heads");
+  
+    setIsBulkChanging(true);
+    try {
+      const token = localStorage.getItem("adminToken");
+      const payload = {
+        userIds: [...selectedUserIds],
+        targetRoleSlug: bulkTargetRole,
+        ...(bulkTargetRole === "coordinator" && { tagId: bulkSelectedTag }),
+        ...(bulkTargetRole === "head" && { teamIds: bulkSelectedTeams }),
+      };
+  
+      const res = await api.put("/admin/users/bulk-change-role", payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+  
+      alert(`✅ ${res.data.msg}`);
+      setBulkRoleModal(false);
+      setSelectedUserIds(new Set());
+  
+      const usersRes = await api.get("/admin/users", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUsers(usersRes.data || []);
+    } catch (err) {
+      alert(err.response?.data?.msg || "Bulk role change failed");
+    } finally {
+      setIsBulkChanging(false);
     }
   };
 
@@ -712,7 +766,7 @@ export default function Dashboard() {
 
         <div className="sticky top-[64px] z-20 bg-slate-800/60 backdrop-blur-xl border-b border-slate-700/50 px-4 py-3 rounded-xl mx-0">
           <div className="flex gap-2 overflow-x-auto">
-            <button key="all-users" onClick={() => setActiveTab("users")} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === "users" ? "bg-blue-500 text-white" : "text-slate-400 hover:text-white hover:bg-slate-700/50"}`}><Users className="w-4 h-4" /> All Users</button>
+            <button key="all-users" onClick={() => { setActiveTab("users"); setSelectedUserIds(new Set()); }} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === "users" ? "bg-blue-500 text-white" : "text-slate-400 hover:text-white hover:bg-slate-700/50"}`}><Users className="w-4 h-4" /> All Users</button>
 
             {roles.map(role => (
               <button
@@ -740,12 +794,36 @@ export default function Dashboard() {
           <div className="overflow-x-auto">
 
             {/* === GENERIC USER TAB (Admin View Only mostly, or Users Tab) === */}
+            {/* {activeTab === "users" && (
+              <>{filteredUsers.length === 0 ? ( */}
             {activeTab === "users" && (
-              <>{filteredUsers.length === 0 ? (
+              <>
+                {selectedUserIds.size > 0 && (
+                  <div className="flex items-center justify-between px-6 py-3 bg-indigo-500/10 border-b border-indigo-500/30">
+                    <span className="text-indigo-300 text-sm font-medium">
+                      {selectedUserIds.size} user{selectedUserIds.size > 1 ? 's' : ''} selected
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setSelectedUserIds(new Set())}
+                        className="text-slate-400 hover:text-white text-sm transition-colors"
+                      >
+                        Clear
+                      </button>
+                      <button
+                        onClick={openBulkRoleModal}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg transition-colors font-medium"
+                      >
+                        <UserCog className="w-4 h-4" /> Change Role
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {filteredUsers.length === 0 ? (
                 <div className="px-6 py-12 text-center"><Users className="w-12 h-12 text-slate-600 mx-auto mb-3" /><p className="text-slate-400">No users found</p></div>
               ) : (
                 <table className="w-full">
-                  <thead className="bg-slate-900/50">
+                  {/* <thead className="bg-slate-900/50">
                     <tr>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Name</th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Roll No</th>
@@ -753,10 +831,51 @@ export default function Dashboard() {
                       <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Division</th>
                       <th className="px-6 py-4 text-right text-sm font-semibold text-slate-300">Actions</th>
                     </tr>
+                  </thead> */}
+
+                  <thead className="bg-slate-900/50">
+                    <tr>
+                      <th className="px-4 py-4 w-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedUserIds.size === filteredUsers.length && filteredUsers.length > 0}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedUserIds(new Set(filteredUsers.map(u => u._id)));
+                            else setSelectedUserIds(new Set());
+                          }}
+                          className="w-4 h-4 rounded border-slate-600 bg-slate-800 accent-indigo-500 cursor-pointer"
+                        />
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Name</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Roll No</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Role</th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Division</th>
+                      <th className="px-6 py-4 text-right text-sm font-semibold text-slate-300">Actions</th>
+                    </tr>
                   </thead>
+
                   <tbody className="divide-y divide-slate-700/50">
-                    {filteredUsers.map((u) => (
+                    {/* {filteredUsers.map((u) => (
                       <tr key={u._id} className="hover:bg-slate-700/30 transition-colors cursor-pointer" onContextMenu={(e) => handleContextMenu(e, u, "user")}>
+                        <td className="px-6 py-4">
+                          <div className="text-white font-medium">{u.name}</div>
+                          <div className="text-xs text-slate-400">{u.email}</div>
+                        </td> */}
+                    {filteredUsers.map((u) => (
+                      <tr key={u._id} className={`transition-colors cursor-pointer ${selectedUserIds.has(u._id) ? 'bg-indigo-500/10' : 'hover:bg-slate-700/30'}`} onContextMenu={(e) => handleContextMenu(e, u, "user")}>
+                        <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedUserIds.has(u._id)}
+                            onChange={(e) => {
+                              const next = new Set(selectedUserIds);
+                              if (e.target.checked) next.add(u._id);
+                              else next.delete(u._id);
+                              setSelectedUserIds(next);
+                            }}
+                            className="w-4 h-4 rounded border-slate-600 bg-slate-800 accent-indigo-500 cursor-pointer"
+                          />
+                        </td>
                         <td className="px-6 py-4">
                           <div className="text-white font-medium">{u.name}</div>
                           <div className="text-xs text-slate-400">{u.email}</div>
@@ -791,7 +910,8 @@ export default function Dashboard() {
                     ))}
                   </tbody>
                 </table>
-              )}</>
+              )}
+              </>
             )}
 
             {/* === MEMBERS TAB === */}
@@ -1282,6 +1402,29 @@ export default function Dashboard() {
 
                 return (
                   <>
+                    {/* Bulk Action Bar — shows when users are selected */}
+                    {selectedUserIds.size > 0 && (
+                      <div className="flex items-center justify-between px-6 py-3 bg-indigo-500/10 border-b border-indigo-500/30">
+                        <span className="text-indigo-300 text-sm font-medium">
+                          {selectedUserIds.size} user{selectedUserIds.size > 1 ? 's' : ''} selected
+                        </span>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => setSelectedUserIds(new Set())}
+                            className="text-slate-400 hover:text-white text-sm transition-colors"
+                          >
+                            Clear
+                          </button>
+                          <button
+                            onClick={openBulkRoleModal}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg transition-colors font-medium"
+                          >
+                            <UserCog className="w-4 h-4" /> Change Role
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                
                     {roleUsers.length === 0 ? (
                       <div className="px-6 py-12 text-center">
                         <UsersIcon className="w-12 h-12 text-slate-600 mx-auto mb-3" />
@@ -1291,6 +1434,21 @@ export default function Dashboard() {
                       <table className="w-full">
                         <thead className="bg-slate-900/50">
                           <tr>
+                            {/* Checkbox header */}
+                            <th className="px-4 py-4 w-10">
+                              <input
+                                type="checkbox"
+                                checked={selectedUserIds.size === roleUsers.length && roleUsers.length > 0}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedUserIds(new Set(roleUsers.map(u => u._id)));
+                                  } else {
+                                    setSelectedUserIds(new Set());
+                                  }
+                                }}
+                                className="w-4 h-4 rounded border-slate-600 bg-slate-800 accent-indigo-500 cursor-pointer"
+                              />
+                            </th>
                             <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Name</th>
                             <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Email</th>
                             <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Team / Details</th>
@@ -1306,9 +1464,7 @@ export default function Dashboard() {
                                   >
                                     <option value="all">All Tags</option>
                                     {tags.map((tag) => (
-                                      <option key={tag._id} value={tag._id}>
-                                        {tag.name}
-                                      </option>
+                                      <option key={tag._id} value={tag._id}>{tag.name}</option>
                                     ))}
                                   </select>
                                 </div>
@@ -1318,57 +1474,78 @@ export default function Dashboard() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-700/50">
-                          {roleUsers.map(u => (
-                            <tr key={u._id} className="hover:bg-slate-700/30 transition-colors cursor-pointer" onContextMenu={(e) => handleContextMenu(e, u, "user")}>
-                              <td className="px-6 py-4">
-                                <div className="text-white font-medium">{u.name}</div>
-                                <div className="text-xs text-slate-400">{u.username}</div>
-                              </td>
-                              <td className="px-6 py-4 text-slate-300">{u.email}</td>
-                              <td className="px-6 py-4 text-slate-300">
-                                {u.team && u.team.length > 0 ? (
-                                  <div className="flex flex-wrap gap-1">
-                                    {u.team.map((t, i) => (
-                                      <span key={i} className="px-2 py-1 bg-slate-700 text-slate-300 text-xs rounded">
-                                        {typeof t === 'object' ? t.name : t}
-                                      </span>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <span className="text-slate-500 italic">No assigned team</span>
-                                )}
-                              </td>
-                              {activeTab === 'coordinator' && (
+                          {roleUsers.map(u => {
+                            const isSelected = selectedUserIds.has(u._id);
+                            return (
+                              <tr
+                                key={u._id}
+                                className={`transition-colors cursor-pointer ${isSelected ? 'bg-indigo-500/10' : 'hover:bg-slate-700/30'}`}
+                                onContextMenu={(e) => handleContextMenu(e, u, "user")}
+                              >
+                                {/* Checkbox cell */}
+                                <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={(e) => {
+                                      const next = new Set(selectedUserIds);
+                                      if (e.target.checked) next.add(u._id);
+                                      else next.delete(u._id);
+                                      setSelectedUserIds(next);
+                                    }}
+                                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 accent-indigo-500 cursor-pointer"
+                                  />
+                                </td>
                                 <td className="px-6 py-4">
-                                  {u.tag ? (
-                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-pink-500/20 text-pink-300">
-                                      {typeof u.tag === 'object' ? u.tag.name : u.tag}
-                                    </span>
+                                  <div className="text-white font-medium">{u.name}</div>
+                                  <div className="text-xs text-slate-400">{u.username}</div>
+                                </td>
+                                <td className="px-6 py-4 text-slate-300">{u.email}</td>
+                                <td className="px-6 py-4 text-slate-300">
+                                  {u.team && u.team.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1">
+                                      {u.team.map((t, i) => (
+                                        <span key={i} className="px-2 py-1 bg-slate-700 text-slate-300 text-xs rounded">
+                                          {typeof t === 'object' ? t.name : t}
+                                        </span>
+                                      ))}
+                                    </div>
                                   ) : (
-                                    <span className="text-slate-500 text-xs italic">No tag</span>
+                                    <span className="text-slate-500 italic">No assigned team</span>
                                   )}
                                 </td>
-                              )}
-                              <td className="px-6 py-4 text-right">
-                                <div className="flex justify-end gap-2">
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); router.push(`/edit-member?id=${u._id}`); }}
-                                    className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
-                                    title="Edit User"
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteClick(u, 'user'); }}
-                                    className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                    title="Delete User"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
+                                {activeTab === 'coordinator' && (
+                                  <td className="px-6 py-4">
+                                    {u.tag ? (
+                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-pink-500/20 text-pink-300">
+                                        {typeof u.tag === 'object' ? u.tag.name : u.tag}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-500 text-xs italic">No tag</span>
+                                    )}
+                                  </td>
+                                )}
+                                <td className="px-6 py-4 text-right">
+                                  <div className="flex justify-end gap-2">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); router.push(`/edit-member?id=${u._id}`); }}
+                                      className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
+                                      title="Edit User"
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleDeleteClick(u, 'user'); }}
+                                      className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                      title="Delete User"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     )}
@@ -1970,6 +2147,129 @@ export default function Dashboard() {
           </div>
         )
       }
+
+      {bulkRoleModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-white">Change Role</h3>
+                <p className="text-slate-400 text-sm mt-1">
+                  Changing role for {selectedUserIds.size} user{selectedUserIds.size > 1 ? 's' : ''}
+                </p>
+              </div>
+              <button
+                onClick={() => setBulkRoleModal(false)}
+                className="text-slate-400 hover:text-white p-2 hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Step 1: Pick target role */}
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-slate-300 mb-2">Target Role</label>
+              <div className="grid grid-cols-2 gap-2">
+                {roles
+                  .filter(r => r.slug !== 'admin')
+                  .map(role => (
+                    <button
+                      key={role._id}
+                      onClick={() => { setBulkTargetRole(role.slug); setBulkSelectedTag(""); setBulkSelectedTeams([]); }}
+                      className={`px-4 py-3 rounded-xl text-sm font-medium border transition-all ${
+                        bulkTargetRole === role.slug
+                          ? 'bg-indigo-500/30 border-indigo-400 text-white'
+                          : 'bg-slate-900/50 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-white'
+                      }`}
+                    >
+                      {role.name}
+                    </button>
+                  ))
+                }
+              </div>
+            </div>
+
+            {/* Step 2a: Coordinator → pick a tag */}
+            {bulkTargetRole === 'coordinator' && (
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Assign Tag <span className="text-red-400">*</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {tags.map(tag => (
+                    <button
+                      key={tag._id}
+                      onClick={() => setBulkSelectedTag(tag._id)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                        bulkSelectedTag === tag._id
+                          ? 'bg-pink-500/30 border-pink-400 text-pink-200'
+                          : 'bg-slate-900/50 border-slate-700 text-slate-400 hover:border-pink-500/50 hover:text-white'
+                      }`}
+                    >
+                      {tag.name}
+                    </button>
+                  ))}
+                  {tags.length === 0 && (
+                    <p className="text-slate-500 text-xs italic">No tags available. Create tags first.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Step 2b: Head → pick team(s) */}
+            {bulkTargetRole === 'head' && (
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Assign to Team(s) <span className="text-red-400">*</span>
+                </label>
+                <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
+                  {teams.map(team => {
+                    const isSelected = bulkSelectedTeams.includes(team._id);
+                    return (
+                      <button
+                        key={team._id}
+                        onClick={() => {
+                          setBulkSelectedTeams(prev =>
+                            isSelected ? prev.filter(id => id !== team._id) : [...prev, team._id]
+                          );
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                          isSelected
+                            ? 'bg-purple-500/30 border-purple-400 text-purple-200'
+                            : 'bg-slate-900/50 border-slate-700 text-slate-400 hover:border-purple-500/50 hover:text-white'
+                        }`}
+                      >
+                        {isSelected && <span className="mr-1">✓</span>}
+                        {team.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                {bulkSelectedTeams.length > 0 && (
+                  <p className="text-slate-500 text-xs mt-2">{bulkSelectedTeams.length} team{bulkSelectedTeams.length > 1 ? 's' : ''} selected</p>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setBulkRoleModal(false)}
+                className="flex-1 px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkChangeRole}
+                disabled={isBulkChanging || !bulkTargetRole}
+                className="flex-1 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isBulkChanging && <Loader2 className="w-4 h-4 animate-spin" />}
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {
         deleteModal && (
