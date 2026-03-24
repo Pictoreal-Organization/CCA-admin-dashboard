@@ -25,7 +25,8 @@ import {
   MapPin,
   Clock,
   AlertCircle,
-  Edit
+  Edit,
+  RefreshCw
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -81,6 +82,8 @@ export default function Dashboard() {
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [roleForm, setRoleForm] = useState({ name: "", description: "", permissions: [] });
   const [isCreatingRole, setIsCreatingRole] = useState(false);
+
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("adminToken");
@@ -172,6 +175,70 @@ export default function Dashboard() {
       alert(err.response?.data?.msg || "Failed to add tag");
     } finally {
       setIsAddingTag(false);
+    }
+  };
+
+  const handleSyncSheet = async () => {
+    if (!confirm("Sync members from Google Sheet? This will add/update members in the database.")) return;
+    setIsSyncing(true);
+  
+    try {
+      const token = localStorage.getItem("adminToken");
+  
+      // 1. Trigger the sync (returns immediately)
+      await api.post("/admin/sync-members-from-sheet", {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+  
+      // 2. Poll /sync-status every 3 seconds until done
+      const poll = setInterval(async () => {
+        try {
+          const statusRes = await api.get("/admin/sync-status", {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const { running, result, error } = statusRes.data;
+  
+          if (!running) {
+            clearInterval(poll);
+            setIsSyncing(false);
+  
+            if (error) {
+              alert(`❌ Sync failed:\n${error}`);
+              return;
+            }
+  
+            if (result) {
+              alert(
+                `✅ Sync Complete!\n\n` +
+                `🆕 Added: ${result.added.length}\n` +
+                `🔄 Updated: ${result.updated.length}\n` +
+                `⚠️ Skipped: ${result.skipped.length}\n` +
+                `❌ Errors: ${result.errors.length}` +
+                (result.errors.length > 0
+                  ? `\n\nErrors:\n${result.errors.map(e => `• ${e.email}: ${e.error}`).join('\n')}`
+                  : '')
+              );
+  
+              // Refresh users
+              const usersRes = await api.get("/admin/users", {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              setUsers(usersRes.data || []);
+            }
+          }
+        } catch (pollErr) {
+          console.error("Polling error:", pollErr);
+        }
+      }, 3000); // poll every 3 seconds
+  
+    } catch (err) {
+      setIsSyncing(false);
+      // Handle 409 (already running) gracefully
+      if (err.response?.status === 409) {
+        alert("Sync is already in progress! Check back in a moment.");
+      } else {
+        alert(err.response?.data?.error || "Failed to start sync.");
+      }
     }
   };
 
@@ -606,7 +673,7 @@ export default function Dashboard() {
         {/* Quick Actions */}
         <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 mb-8">
           <h2 className="text-xl font-bold text-white mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <button onClick={() => router.push("/create-member")} className="flex flex-col items-center gap-3 p-4 bg-gradient-to-br from-blue-500/10 to-blue-600/10 border border-blue-500/20 hover:border-blue-500/40 rounded-xl transition-all group">
               <div className="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform"><UserPlus className="w-6 h-6 text-blue-400" /></div><span className="text-white font-medium">Add Member</span>
             </button>
@@ -618,6 +685,21 @@ export default function Dashboard() {
             </button>
             <button onClick={() => router.push("/create-task")} className="flex flex-col items-center gap-3 p-4 bg-gradient-to-br from-green-500/10 to-green-600/10 border border-green-500/20 hover:border-green-500/40 rounded-xl transition-all group">
               <div className="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform"><CheckSquare className="w-6 h-6 text-green-400" /></div><span className="text-white font-medium">Create Task</span>
+            </button>
+            <button
+              onClick={handleSyncSheet}
+              disabled={isSyncing}
+              className="flex flex-col items-center gap-3 p-4 bg-gradient-to-br from-amber-500/10 to-amber-600/10 border border-amber-500/20 hover:border-amber-500/40 rounded-xl transition-all group disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <div className="w-12 h-12 bg-amber-500/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                {isSyncing
+                  ? <Loader2 className="w-6 h-6 text-amber-400 animate-spin" />
+                  : <RefreshCw className="w-6 h-6 text-amber-400" />
+                }
+              </div>
+              <span className="text-white font-medium">
+                {isSyncing ? "Syncing..." : "Sync Sheet"}
+              </span>
             </button>
           </div>
         </div>
