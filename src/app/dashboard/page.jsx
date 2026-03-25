@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   Users,
   UserPlus,
@@ -26,7 +28,8 @@ import {
   Clock,
   AlertCircle,
   Edit,
-  RefreshCw
+  RefreshCw,
+  Download
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -118,6 +121,7 @@ export default function Dashboard() {
         setUsers(usersRes.data || []);
         // setMembers and setHeads removed as we will derive them from users + roles
         setMeetings(meetingsRes.data || []);
+        console.log("Sample meeting tags:", meetingsRes.data?.[0]?.tags);
         setTasks(tasksRes.data || []);
         setTags(tagsRes.data || []);
         setTeams(teamsRes.data || []);
@@ -410,34 +414,80 @@ export default function Dashboard() {
     return { userMeetings, userTasks };
   };
 
-  const fetchMemberAttendance = async (memberId) => {
-    // If already fetched, don't fetch again
-    if (memberAttendance[memberId]) {
-      return;
-    }
+  const downloadAttendancePDF = () => {
+    if (!currentMeetingDetails) return;
+  
+    const doc = new jsPDF();
+  
+    doc.setFontSize(18);
+    doc.text(currentMeetingDetails.title || "Meeting", 14, 20);
+  
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Date: ${currentMeetingDetails.dateTime ? new Date(currentMeetingDetails.dateTime).toLocaleString() : "N/A"}`, 14, 30);
+    doc.text(`Location: ${currentMeetingDetails.location || "N/A"}`, 14, 36);
+    doc.text(`Priority: ${currentMeetingDetails.priority || "N/A"}`, 14, 42);
+  
+    const presentList = currentMeetingDetails.attendance?.present || [];
+  
+    doc.setFontSize(13);
+    doc.setTextColor(0);
+    doc.text(`Present Members (${presentList.length})`, 14, 54);
+  
+    const rows = presentList.map((item, idx) => {
+      const m = item.member || item;
+      return [
+        idx + 1,
+        m.name || "N/A",
+        m.rollNo || "N/A",
+        m.email || "N/A",
+        m.year && m.division ? `${m.year} ${m.division}` : "N/A",
+      ];
+    });
+  
+    autoTable(doc, {
+      startY: 58,
+      head: [["#", "Name", "Roll No", "Email", "Year / Division"]],
+      body: rows,
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [6, 182, 212] },
+    });
+  
+    const meetingTitle = (currentMeetingDetails.title || "meeting").replace(/\s+/g, "_");
+    doc.save(`${meetingTitle}_attendance.pdf`);
+  };
 
-    setLoadingAttendance(prev => ({ ...prev, [memberId]: true }));
-    const token = localStorage.getItem("adminToken");
-
-    try {
-      const res = await api.get(`/attendance/member/${memberId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      setMemberAttendance(prev => ({
-        ...prev,
-        [memberId]: res.data || []
-      }));
-    } catch (err) {
-      console.error("Failed to fetch member attendance:", err);
-      // Set empty array on error
-      setMemberAttendance(prev => ({
-        ...prev,
-        [memberId]: []
-      }));
-    } finally {
-      setLoadingAttendance(prev => ({ ...prev, [memberId]: false }));
-    }
+  const downloadAttendanceCSV = () => {
+    if (!currentMeetingDetails) return;
+  
+    const presentList = currentMeetingDetails.attendance?.present || [];
+  
+    const headers = ["#", "Name", "Roll No", "Email", "Year", "Division"];
+  
+    const rows = presentList.map((item, idx) => {
+      const m = item.member || item;
+      return [
+        idx + 1,
+        m.name || "N/A",
+        m.rollNo || "N/A",
+        m.email || "N/A",
+        m.year || "N/A",
+        m.division || "N/A",
+      ];
+    });
+  
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+  
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const meetingTitle = (currentMeetingDetails.title || "meeting").replace(/\s+/g, "_");
+    link.href = url;
+    link.download = `${meetingTitle}_attendance.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const toggleExpand = (userId) => {
@@ -539,6 +589,66 @@ export default function Dashboard() {
     );
   };
 
+  // // Derive members and heads from users
+  // const members = users.filter((u) => u.role === "Member" || u.role === "member");
+  // const heads = users.filter((u) => u.role === "Head" || u.role === "head");
+
+  // const filteredUsers = filterData(users, ["username", "name", "rollNo", "email", "role", "year", "division"]);
+  // const filteredMembersBase = filterData(members, ["username", "name", "rollNo", "email", "team", "year", "division"]);
+
+  // // Apply team filter to members
+  // const filteredMembers = selectedTeamFilter === "all"
+  //   ? filteredMembersBase
+  //   : filteredMembersBase.filter(member => {
+  //     if (!member.team || member.team.length === 0) return false;
+  //     return member.team.some(team => {
+  //       const teamId = typeof team === 'object' ? team._id : team;
+  //       return teamId === selectedTeamFilter;
+  //     });
+  //   });
+
+  // // Filter heads by team
+  // let headsToDisplay = filterData(heads, ["username", "name", "rollNo", "email", "team"]);
+  // if (selectedHeadTeamFilter !== "all") {
+  //   headsToDisplay = headsToDisplay.filter(h =>
+  //     h.team?.some(t => (t._id || t) === selectedHeadTeamFilter)
+  //   );
+  // }
+  // const filteredHeads = headsToDisplay;
+
+  // // Filter meetings by priority, team, and tag
+  // let meetingsToDisplay = meetings;
+  // if (selectedMeetingPriorityFilter !== "all") {
+  //   meetingsToDisplay = meetingsToDisplay.filter(m => m.priority === selectedMeetingPriorityFilter);
+  // }
+  // if (selectedMeetingTeamFilter !== "all") {
+  //   meetingsToDisplay = meetingsToDisplay.filter(m => {
+  //     if (!m.team) return false; // Exclude meetings without team
+  //     const teamId = typeof m.team === 'object' ? m.team._id : m.team;
+  //     return teamId === selectedMeetingTeamFilter;
+  //   });
+  // }
+  // if (selectedMeetingTagFilter !== "all") {
+  //   meetingsToDisplay = meetingsToDisplay.filter(m =>
+  //     m.tags?.some(tag => (tag._id || tag) === selectedMeetingTagFilter)
+  //   );
+  // }
+  // const filteredMeetings = filterData(meetingsToDisplay, ["title", "location", "status", "priority", "tags"]);
+
+  // // Filter tasks by team and tag
+  // let tasksToDisplay = tasks;
+  // if (selectedTaskTeamFilter !== "all") {
+  //   tasksToDisplay = tasksToDisplay.filter(t => (t.team?._id || t.team) === selectedTaskTeamFilter);
+  // }
+  // if (selectedTaskTagFilter !== "all") {
+  //   tasksToDisplay = tasksToDisplay.filter(t =>
+  //     t.tags?.some(tag => (tag._id || tag) === selectedTaskTagFilter)
+  //   );
+  // }
+  // const filteredTasks = filterData(tasksToDisplay, ["title", "team.name", "status"]);
+  // const filteredTags = filterData(tags, ["name"]); // ✅ Filter Tags
+
+
   // Derive members and heads from users
   const members = users.filter((u) => u.role === "Member" || u.role === "member");
   const heads = users.filter((u) => u.role === "Head" || u.role === "head");
@@ -550,18 +660,18 @@ export default function Dashboard() {
   const filteredMembers = selectedTeamFilter === "all"
     ? filteredMembersBase
     : filteredMembersBase.filter(member => {
-      if (!member.team || member.team.length === 0) return false;
-      return member.team.some(team => {
-        const teamId = typeof team === 'object' ? team._id : team;
-        return teamId === selectedTeamFilter;
+        if (!member.team || member.team.length === 0) return false;
+        return member.team.some(team => {
+          const teamId = typeof team === "object" ? String(team._id) : String(team);
+          return teamId === selectedTeamFilter;
+        });
       });
-    });
 
   // Filter heads by team
   let headsToDisplay = filterData(heads, ["username", "name", "rollNo", "email", "team"]);
   if (selectedHeadTeamFilter !== "all") {
     headsToDisplay = headsToDisplay.filter(h =>
-      h.team?.some(t => (t._id || t) === selectedHeadTeamFilter)
+      h.team?.some(t => String(t._id || t) === selectedHeadTeamFilter)
     );
   }
   const filteredHeads = headsToDisplay;
@@ -573,30 +683,47 @@ export default function Dashboard() {
   }
   if (selectedMeetingTeamFilter !== "all") {
     meetingsToDisplay = meetingsToDisplay.filter(m => {
-      if (!m.team) return false; // Exclude meetings without team
-      const teamId = typeof m.team === 'object' ? m.team._id : m.team;
+      if (!m.team) return false;
+      const teamId = typeof m.team === "object" ? String(m.team._id) : String(m.team);
       return teamId === selectedMeetingTeamFilter;
     });
   }
+  // if (selectedMeetingTagFilter !== "all") {
+  //   meetingsToDisplay = meetingsToDisplay.filter(m =>
+  //     m.tags?.some(tag => String(tag._id || tag) === selectedMeetingTagFilter)
+  //   );
+  // }
   if (selectedMeetingTagFilter !== "all") {
-    meetingsToDisplay = meetingsToDisplay.filter(m =>
-      m.tags?.some(tag => (tag._id || tag) === selectedMeetingTagFilter)
-    );
+    meetingsToDisplay = meetingsToDisplay.filter(m => {
+      if (!m.tags || !Array.isArray(m.tags) || m.tags.length === 0) return false;
+      return m.tags.some(tag => {
+        if (!tag) return false;
+        // Handle: populated object {_id, name}, plain string, or raw ObjectId
+        const tagId = typeof tag === "object" && tag !== null
+          ? String(tag._id ?? tag)
+          : String(tag);
+        return tagId === selectedMeetingTagFilter;
+      });
+    });
   }
-  const filteredMeetings = filterData(meetingsToDisplay, ["title", "location", "status", "priority", "tags"]);
+  const filteredMeetings = filterData(meetingsToDisplay, ["title", "location", "status", "priority"]);
 
   // Filter tasks by team and tag
   let tasksToDisplay = tasks;
   if (selectedTaskTeamFilter !== "all") {
-    tasksToDisplay = tasksToDisplay.filter(t => (t.team?._id || t.team) === selectedTaskTeamFilter);
+    tasksToDisplay = tasksToDisplay.filter(t => {
+      if (!t.team) return false;
+      const teamId = typeof t.team === "object" ? String(t.team._id) : String(t.team);
+      return teamId === selectedTaskTeamFilter;
+    });
   }
   if (selectedTaskTagFilter !== "all") {
     tasksToDisplay = tasksToDisplay.filter(t =>
-      t.tags?.some(tag => (tag._id || tag) === selectedTaskTagFilter)
+      t.tags?.some(tag => String(tag._id || tag) === selectedTaskTagFilter)
     );
   }
   const filteredTasks = filterData(tasksToDisplay, ["title", "team.name", "status"]);
-  const filteredTags = filterData(tags, ["name"]); // ✅ Filter Tags
+  const filteredTags = filterData(tags, ["name"]);
 
   const sortedUsers = [...filteredUsers].sort((a, b) => {
     const nameA = (a.name || "").toLowerCase();
@@ -1210,7 +1337,7 @@ export default function Dashboard() {
                               >
                                 <option value="all">All Tags</option>
                                 {tags.map((tag) => (
-                                  <option key={tag._id} value={tag._id}>
+                                  <option key={tag._id} value={tag.name}>
                                     {tag.name}
                                   </option>
                                 ))}
@@ -1397,7 +1524,8 @@ export default function Dashboard() {
 
                 // Apply tag filter for coordinators
                 if (activeTab === 'coordinator' && selectedCoordinatorTagFilter !== "all") {
-                  roleUsers = roleUsers.filter(u => (u.tag?._id || u.tag) === selectedCoordinatorTagFilter);
+                  // roleUsers = roleUsers.filter(u => (u.tag?._id || u.tag) === selectedCoordinatorTagFilter);
+                  roleUsers = roleUsers.filter(u => String(u.tag?._id || u.tag) === selectedCoordinatorTagFilter);
                 }
 
                 return (
@@ -1598,7 +1726,7 @@ export default function Dashboard() {
                               >
                                 <option value="all">All Tags</option>
                                 {tags.map((tag) => (
-                                  <option key={tag._id} value={tag._id}>
+                                  <option key={tag._id} value={tag.name}>
                                     {tag.name}
                                   </option>
                                 ))}
@@ -1924,6 +2052,22 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+
+              <div className="p-6 border-t border-slate-700/50 bg-slate-900/50 flex gap-3">
+                <button
+                  onClick={downloadAttendancePDF}
+                  className="flex-1 px-4 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+                >
+                  <Download className="w-4 h-4" /> PDF
+                </button>
+                <button
+                  onClick={downloadAttendanceCSV}
+                  className="flex-1 px-4 py-3 bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+                >
+                  <Download className="w-4 h-4" /> CSV
+                </button>
+              
+              </div>              
 
               {/* Modal Footer */}
               <div className="p-6 border-t border-slate-700/50 bg-slate-900/50">
